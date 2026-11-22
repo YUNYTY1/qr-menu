@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
 import { isEmail } from '@/lib/validators'
@@ -75,6 +75,7 @@ export default function LoginPage() {
             onClick={() => { setMode(mode === 'login' ? 'forgot' : 'login'); setError(null); setInfo(null) }}>
             {mode === 'login' ? '¿Olvidaste tu contraseña?' : 'Volver a iniciar sesión'}
           </button>
+          <p className="text-center text-sm text-slate-500">¿Aún no tienes cuenta? <Link to="/registro" className="font-semibold text-brand-700 hover:underline">Empieza gratis</Link></p>
         </form>
       </div>
     </div>

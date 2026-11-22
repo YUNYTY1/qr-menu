@@ -11,6 +11,7 @@ import { Badge, ErrorBox, PageLoader } from '@/components/ui/Feedback'
 import { Select } from '@/components/ui/Form'
 import { useAuth } from '@/features/auth/AuthContext'
 import { FULL_LIMITS, RestaurantContext, STARTER_LIMITS, type RestaurantCtx } from './RestaurantContext'
+import PlanBanner from './PlanBanner'
 
 export default function PanelLayout() {
   const { rid = '' } = useParams()
@@ -52,6 +53,7 @@ export default function PanelLayout() {
     { to: `${base}/qr`, label: 'Código QR', icon: 'qr' },
     { to: `${base}/stats`, label: 'Estadísticas', icon: 'stats' },
     { to: `${base}/info`, label: 'Mi restaurante', icon: 'store' },
+    { to: `${base}/plan`, label: 'Mi plan', icon: 'plans' },
   ]
 
   const top = (
@@ -109,14 +111,11 @@ export default function PanelLayout() {
               className="mb-5 rounded-2xl border border-amber-300/80 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm"
             >
               Tu suscripción está <strong>{STATUS_LABEL[ctx.status].toLowerCase()}</strong>
-              {ctx.subscription?.end_date ? ` (vencimiento: ${fmtDate(ctx.subscription.end_date)})` : ''}. El panel está en modo solo lectura y tu menú público no se muestra. Contacta a Grupo Underty para reactivarlo. Tus datos están seguros.
+              {ctx.subscription?.end_date ? ` (vencimiento: ${fmtDate(ctx.subscription.end_date)})` : ''}. El panel está en modo solo lectura y tu menú público no se muestra. Para reactivarlo, paga tu plan en{' '}
+              <Link to={`${base}/plan`} className="font-semibold underline">Mi plan</Link>. Tus datos están seguros.
             </div>
           )}
-          {ctx.status === 'pendiente' && (
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-sm text-sky-950 shadow-sm">
-              <span>Tu suscripción está pendiente de confirmación de pago. Mientras tanto puedes seguir configurando tu menú.</span>
-            </div>
-          )}
+          <PlanBanner />
           <Outlet />
         </RestaurantContext.Provider>
       )}

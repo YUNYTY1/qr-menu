@@ -5,6 +5,7 @@ const nav: NavItem[] = [
   { to: '/superadmin', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/superadmin/restaurants', label: 'Restaurantes', icon: 'store' },
   { to: '/superadmin/plans', label: 'Planes', icon: 'plans' },
+  { to: '/superadmin/payments', label: 'Pagos', icon: 'check' },
 ]
 
 export default function SuperLayout() {

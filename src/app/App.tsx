@@ -19,6 +19,10 @@ import ThemePage from '@/features/panel/ThemePage'
 import QRPage from '@/features/panel/QRPage'
 import StatsPage from '@/features/panel/StatsPage'
 import InfoPage from '@/features/panel/InfoPage'
+import RegisterPage from '@/features/auth/RegisterPage'
+import OnboardingPage from '@/features/auth/OnboardingPage'
+import PaymentsPage from '@/features/superadmin/PaymentsPage'
+import PlanPage from '@/features/panel/PlanPage'
 
 function PublicMenuRoute() {
   const { slug } = useParams()
@@ -47,9 +51,12 @@ export default function App() {
             <Route path="/" element={<HomeRedirect />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/registro" element={<RegisterPage />} />
+            <Route path="/empezar" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
             <Route path="/m/:slug" element={<PublicMenuRoute />} />
 
             <Route path="/superadmin" element={<RequireSuperadmin><SuperLayout /></RequireSuperadmin>}>
+            <Route path="payments" element={<PaymentsPage />} />
               <Route index element={<DashboardPage />} />
               <Route path="restaurants" element={<RestaurantsPage />} />
               <Route path="restaurants/:id" element={<RestaurantDetailPage />} />
@@ -58,6 +65,7 @@ export default function App() {
 
             <Route path="/panel" element={<HomeRedirect />} />
             <Route path="/panel/:rid" element={<RequireAuth><PanelLayout /></RequireAuth>}>
+            <Route path="plan" element={<PlanPage />} />
               <Route index element={<Navigate to="products" replace />} />
               <Route path="categories" element={<CategoriesPage />} />
               <Route path="products" element={<ProductsPage />} />

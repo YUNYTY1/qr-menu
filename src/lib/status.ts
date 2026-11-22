@@ -15,7 +15,7 @@ export const STATUS_COLOR: Record<SubStatus, string> = {
 /** Estado real: una suscripción "activo" con fecha pasada se considera vencida. */
 export function effStatus(s: Pick<Subscription, 'status' | 'end_date'> | null | undefined): SubStatus {
   if (!s) return 'pendiente'
-  if (s.status === 'activo' && s.end_date && s.end_date < todayLima()) return 'vencido'
+  if ((s.status === 'activo' || s.status === 'pendiente') && s.end_date && s.end_date < todayLima()) return 'vencido'
   return s.status
 }
 
