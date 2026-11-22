@@ -32,10 +32,14 @@ export default function PanelLayout() {
     const plan = one<Plan>(subscription?.plans as Plan | Plan[] | null)
     const status = effStatus(subscription)
     return {
-      restaurant: data.restaurant, subscription, plan, status,
+      restaurant: data.restaurant,
+      subscription,
+      plan,
+      status,
       limits: isSuper ? FULL_LIMITS : { ...STARTER_LIMITS, ...(plan?.limits ?? {}) },
       canWrite: isSuper || status === 'activo' || status === 'pendiente',
-      isSuperadmin: isSuper, reload,
+      isSuperadmin: isSuper,
+      reload,
     }
   }, [data, isSuper, reload])
 
@@ -51,36 +55,67 @@ export default function PanelLayout() {
   ]
 
   const top = (
-    <div className="space-y-2 rounded-xl bg-slate-800 p-3">
-      {isSuper && <Link to={`/superadmin/restaurants/${rid}`} className="block text-xs font-medium text-brand-300 hover:text-brand-200">← Volver a Grupo Underty</Link>}
+    <div className="space-y-2.5 rounded-2xl border border-white/10 bg-slate-800/90 p-3.5 shadow-inner">
+      {isSuper && (
+        <Link
+          to={`/superadmin/restaurants/${rid}`}
+          className="inline-flex items-center gap-1 text-xs font-medium text-orange-300 transition hover:text-orange-200"
+        >
+          ← Volver a Grupo Underty
+        </Link>
+      )}
       {!isSuper && memberships.length > 1 ? (
-        <Select value={rid} onChange={(e) => navigate(`/panel/${e.target.value}`)} className="!border-slate-700 !bg-slate-900 !text-white">
-          {memberships.map((m) => <option key={m.restaurant_id} value={m.restaurant_id}>{m.restaurant.name}</option>)}
+        <Select
+          value={rid}
+          onChange={(e) => navigate(`/panel/${e.target.value}`)}
+          className="!rounded-xl !border-slate-700 !bg-slate-900 !text-white"
+        >
+          {memberships.map((m) => (
+            <option key={m.restaurant_id} value={m.restaurant_id}>
+              {m.restaurant.name}
+            </option>
+          ))}
         </Select>
-      ) : <p className="truncate text-sm font-semibold text-white">{data?.restaurant.name ?? '…'}</p>}
+      ) : (
+        <p className="truncate text-sm font-semibold tracking-tight text-white">
+          {data?.restaurant.name ?? 'Cargando carta…'}
+        </p>
+      )}
       {ctx && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 pt-0.5">
           <Badge status={ctx.status} />
-          <a href={publicUrl(ctx.restaurant.slug)} target="_blank" rel="noreferrer" className="text-xs font-medium text-slate-300 hover:text-white">Ver menú ↗</a>
+          <a
+            href={publicUrl(ctx.restaurant.slug)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-medium text-slate-100 transition hover:bg-orange-500 hover:text-white"
+          >
+            Ver menú ↗
+          </a>
         </div>
       )}
     </div>
   )
 
   return (
-    <AdminShell title="Panel del restaurante" nav={nav} top={top}>
+    <AdminShell title="Editor de carta" nav={nav} top={top}>
       {loading && <PageLoader />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {ctx && (
         <RestaurantContext.Provider value={ctx}>
           {!ctx.canWrite && !ctx.isSuperadmin && (
-            <div role="alert" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <div
+              role="alert"
+              className="mb-5 rounded-2xl border border-amber-300/80 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm"
+            >
               Tu suscripción está <strong>{STATUS_LABEL[ctx.status].toLowerCase()}</strong>
               {ctx.subscription?.end_date ? ` (vencimiento: ${fmtDate(ctx.subscription.end_date)})` : ''}. El panel está en modo solo lectura y tu menú público no se muestra. Contacta a Grupo Underty para reactivarlo. Tus datos están seguros.
             </div>
           )}
           {ctx.status === 'pendiente' && (
-            <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">Tu suscripción está pendiente de confirmación de pago. Mientras tanto puedes seguir configurando tu menú.</div>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-sm text-sky-950 shadow-sm">
+              <span>Tu suscripción está pendiente de confirmación de pago. Mientras tanto puedes seguir configurando tu menú.</span>
+            </div>
           )}
           <Outlet />
         </RestaurantContext.Provider>

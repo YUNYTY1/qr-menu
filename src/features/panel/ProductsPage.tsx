@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase, unwrap } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
 import { money } from '@/lib/format'
@@ -11,10 +12,19 @@ import { Field, Input, Select, Textarea, Toggle } from '@/components/ui/Form'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import ImageUpload from '@/components/ui/ImageUpload'
 import Icon from '@/components/ui/Icon'
-import { Link } from 'react-router-dom'
+import ImportMenuModal from './ImportMenuModal'
 import { useRestaurant } from './RestaurantContext'
 
-interface Form { id?: string; name: string; description: string; price: string; category_id: string; image_url: string | null; is_available: boolean; is_published: boolean }
+interface Form {
+  id?: string
+  name: string
+  description: string
+  price: string
+  category_id: string
+  image_url: string | null
+  is_available: boolean
+  is_published: boolean
+}
 
 export default function ProductsPage() {
   const { restaurant, canWrite, limits } = useRestaurant()
@@ -31,19 +41,49 @@ export default function ProductsPage() {
   const [cat, setCat] = useState('')
   const [form, setForm] = useState<Form | null>(null)
   const [del, setDel] = useState<Product | null>(null)
+  const [importing, setImporting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [animId, setAnimId] = useState<string | null>(null)
 
   const catName = useMemo(() => new Map((data?.categories ?? []).map((c) => [c.id, c.name])), [data])
-  const filtered = (data?.products ?? []).filter((p) =>
-    (!cat || p.category_id === cat) && (!q || p.name.toLowerCase().includes(q.toLowerCase())))
+  const filtered = (data?.products ?? []).filter(
+    (p) => (!cat || p.category_id === cat) && (!q || p.name.toLowerCase().includes(q.toLowerCase()))
+  )
   const total = data?.products.length ?? 0
   const max = limits.max_products
   const reached = max >= 0 && total >= max
 
+  function triggerPulse(id: string) {
+    setAnimId(id)
+    setTimeout(() => setAnimId((curr) => (curr === id ? null : curr)), 450)
+  }
+
   function openNew() {
     setErr(null)
-    setForm({ name: '', description: '', price: '', category_id: cat || data?.categories[0]?.id || '', image_url: null, is_available: true, is_published: true })
+    setForm({
+      name: '',
+      description: '',
+      price: '',
+      category_id: cat || data?.categories[0]?.id || '',
+      image_url: null,
+      is_available: true,
+      is_published: true,
+    })
+  }
+
+  function openEdit(p: Product) {
+    setErr(null)
+    setForm({
+      id: p.id,
+      name: p.name,
+      description: p.description ?? '',
+      price: String(p.price),
+      category_id: p.category_id,
+      image_url: p.image_url,
+      is_available: p.is_available,
+      is_published: p.is_published,
+    })
   }
 
   async function save() {
@@ -52,72 +92,292 @@ export default function ProductsPage() {
     if (!form.name.trim()) return setErr('Escribe el nombre del producto.')
     if (price === null) return setErr('El precio no es válido.')
     if (!form.category_id) return setErr('Selecciona una categoría. Si no tienes, crea una primero.')
-    setBusy(true); setErr(null)
+    setBusy(true)
+    setErr(null)
     try {
-      const row = { name: form.name.trim(), description: form.description.trim() || null, price, category_id: form.category_id, image_url: form.image_url, is_available: form.is_available, is_published: form.is_published }
-      if (form.id) await unwrap(supabase.from('products').update(row).eq('id', form.id))
-      else await unwrap(supabase.from('products').insert({ ...row, restaurant_id: restaurant.id }))
-      toast('Producto guardado'); setForm(null); reload()
-    } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+      const row = {
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        price,
+        category_id: form.category_id,
+        image_url: form.image_url,
+        is_available: form.is_available,
+        is_published: form.is_published,
+      }
+      if (form.id) {
+        await unwrap(supabase.from('products').update(row).eq('id', form.id))
+        triggerPulse(form.id)
+      } else {
+        const created = await unwrap<Product>(
+          supabase.from('products').insert({ ...row, restaurant_id: restaurant.id }).select().single()
+        )
+        if (created?.id) triggerPulse(created.id)
+      }
+      toast('Producto guardado')
+      setForm(null)
+      reload()
+    } catch (e) {
+      setErr(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function patch(p: Product, change: Partial<Product>, msg: string) {
-    try { await unwrap(supabase.from('products').update(change).eq('id', p.id)); toast(msg); reload() }
-    catch (e) { toast(errMsg(e), 'error') }
+    triggerPulse(p.id)
+    try {
+      await unwrap(supabase.from('products').update(change).eq('id', p.id))
+      toast(msg)
+      reload()
+    } catch (e) {
+      toast(errMsg(e), 'error')
+    }
   }
 
   async function duplicate(p: Product) {
     try {
-      await unwrap(supabase.from('products').insert({
-        restaurant_id: restaurant.id, category_id: p.category_id, name: `${p.name} (copia)`.slice(0, 120), description: p.description,
-        price: p.price, image_url: p.image_url, is_available: p.is_available, is_published: false,
-      }))
-      toast('Producto duplicado (queda oculto hasta que lo publiques)'); reload()
-    } catch (e) { toast(errMsg(e), 'error') }
+      const created = await unwrap<Product>(
+        supabase
+          .from('products')
+          .insert({
+            restaurant_id: restaurant.id,
+            category_id: p.category_id,
+            name: `${p.name} (copia)`.slice(0, 120),
+            description: p.description,
+            price: p.price,
+            image_url: p.image_url,
+            is_available: p.is_available,
+            is_published: false,
+          })
+          .select()
+          .single()
+      )
+      if (created?.id) triggerPulse(created.id)
+      toast('Producto duplicado (queda oculto hasta que lo publiques)')
+      reload()
+    } catch (e) {
+      toast(errMsg(e), 'error')
+    }
   }
 
   return (
-    <div>
-      <PageHeader title="Productos"
-        subtitle={`${total} de ${max < 0 ? 'ilimitados' : max} productos en tu plan`}
-        actions={<Button disabled={!canWrite || reached} onClick={openNew}><Icon name="plus" className="h-4 w-4" /> Nuevo producto</Button>} />
-      {reached && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Llegaste al límite de productos de tu plan. Contacta a Grupo Underty para ampliarlo.</p>}
+    <div className="pb-20 sm:pb-6">
+      <PageHeader
+        title="Productos"
+        subtitle={`${total} de ${max < 0 ? 'ilimitados' : max} productos en tu carta`}
+        actions={
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <Button
+              variant="secondary"
+              disabled={!canWrite || reached}
+              onClick={() => setImporting(true)}
+              className="flex-1 justify-center rounded-xl sm:flex-initial"
+            >
+              ✨ Importar con IA
+            </Button>
+            <Button
+              disabled={!canWrite || reached}
+              onClick={openNew}
+              className="flex-1 justify-center rounded-xl sm:flex-initial"
+            >
+              <Icon name="plus" className="h-4 w-4" /> Nuevo producto
+            </Button>
+          </div>
+        }
+      />
+
+      {reached && (
+        <p className="anim-pop-in mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Llegaste al límite de productos de tu plan. Contacta a Grupo Underty para ampliarlo.
+        </p>
+      )}
+
       {loading && <PageLoader />}
       {error && <ErrorBox message={error} onRetry={reload} />}
+
       {data && data.categories.length === 0 && (
-        <EmptyState title="Primero crea una categoría" hint="Los productos se organizan dentro de categorías."
-          action={<Link to={`/panel/${restaurant.id}/categories`} className="text-sm font-semibold text-brand-700 hover:underline">Ir a categorías</Link>} />
+        <EmptyState
+          title="Primero crea una categoría"
+          hint="Los productos se organizan dentro de categorías (ej. Pollos, Bebidas, Combos)."
+          action={
+            <Link
+              to={`/panel/${restaurant.id}/categories`}
+              className="inline-flex items-center rounded-xl bg-orange-50 px-3.5 py-2 text-sm font-semibold text-orange-700 transition-all duration-150 hover:bg-orange-100 active:scale-95"
+            >
+              Ir a categorías →
+            </Link>
+          }
+        />
       )}
+
       {data && data.categories.length > 0 && (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_220px]">
-            <Input placeholder="Buscar producto…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <Select value={cat} onChange={(e) => setCat(e.target.value)}>
-              <option value="">Todas las categorías</option>
-              {data.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
+          <div className="anim-fade-in mb-4 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs">
+            <div className="grid gap-2.5 sm:grid-cols-[1fr_220px]">
+              <Input
+                placeholder="Buscar plato o bebida…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="!rounded-xl"
+              />
+              <Select
+                value={cat}
+                onChange={(e) => setCat(e.target.value)}
+                className="!rounded-xl"
+              >
+                <option value="">Todas las categorías</option>
+                {data.categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="no-scrollbar -mx-1 mt-2.5 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:hidden">
+              <button
+                type="button"
+                onClick={() => setCat('')}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 active:scale-95 ${
+                  cat === ''
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Todos ({data.products.length})
+              </button>
+              {data.categories.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCat(c.id)}
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 active:scale-95 ${
+                    cat === c.id
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
           </div>
-          {filtered.length === 0 && <EmptyState title="Sin productos" hint="Agrega tu primer producto o ajusta los filtros." />}
+
+          {filtered.length === 0 && (
+            <EmptyState
+              title="Sin productos"
+              hint="Agrega tu primer producto o ajusta la búsqueda."
+            />
+          )}
+
           <div className="grid gap-3 md:grid-cols-2">
             {filtered.map((p) => (
-              <Card key={p.id} className="flex gap-3 !p-3">
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400">
-                  {p.image_url ? <img src={p.image_url} alt="" loading="lazy" className="h-full w-full object-cover" /> : <Icon name="image" className="h-8 w-8" />}
-                </div>
+              <Card
+                key={p.id}
+                className={`anim-pop-in group flex gap-3.5 rounded-2xl border border-slate-200/80 !p-3.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md active:scale-[0.99] ${
+                  animId === p.id ? 'scale-[1.01] ring-2 ring-orange-400/70' : ''
+                } ${!p.is_published || !p.is_available ? 'bg-slate-50/70' : 'bg-white'}`}
+              >
+                <button
+                  type="button"
+                  disabled={!canWrite}
+                  onClick={() => openEdit(p)}
+                  className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-1 ring-slate-200/70 transition-all duration-150 group-hover:ring-orange-300 active:scale-95 disabled:cursor-default"
+                >
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : (
+                    <Icon name="image" className="h-7 w-7" />
+                  )}
+                </button>
+
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <p className="truncate font-semibold">{p.name}</p>
-                  <p className="text-xs text-slate-500">{catName.get(p.category_id)}</p>
-                  <p className="mt-0.5 text-sm font-bold text-brand-700">{money(restaurant.currency, p.price)}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {!p.is_available && <Pill tone="red">Agotado</Pill>}
-                    {!p.is_published && <Pill tone="amber">Oculto</Pill>}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        disabled={!canWrite}
+                        onClick={() => openEdit(p)}
+                        className="block max-w-full truncate text-left font-semibold text-slate-900 transition-colors hover:text-orange-600 disabled:cursor-default"
+                      >
+                        {p.name}
+                      </button>
+                      <p className="text-xs font-medium text-slate-500">
+                        {catName.get(p.category_id)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-lg bg-orange-50 px-2 py-0.5 text-sm font-bold text-orange-700 transition-transform duration-150 group-hover:scale-105">
+                      {money(restaurant.currency, p.price)}
+                    </span>
                   </div>
-                  <div className="mt-auto flex flex-wrap items-center gap-0.5 pt-1">
-                    <IconButton label="Editar" disabled={!canWrite} onClick={() => { setErr(null); setForm({ id: p.id, name: p.name, description: p.description ?? '', price: String(p.price), category_id: p.category_id, image_url: p.image_url, is_available: p.is_available, is_published: p.is_published }) }}><Icon name="edit" className="h-4 w-4" /></IconButton>
-                    <IconButton label="Duplicar" disabled={!canWrite || reached} onClick={() => duplicate(p)}><Icon name="copy" className="h-4 w-4" /></IconButton>
-                    <IconButton label={p.is_published ? 'Ocultar temporalmente' : 'Publicar'} disabled={!canWrite} onClick={() => patch(p, { is_published: !p.is_published }, p.is_published ? 'Producto oculto' : 'Producto publicado')}><Icon name={p.is_published ? 'eye' : 'eyeoff'} className="h-4 w-4" /></IconButton>
-                    <Button size="sm" variant="ghost" disabled={!canWrite} onClick={() => patch(p, { is_available: !p.is_available }, p.is_available ? 'Marcado como agotado' : 'Disponible nuevamente')}>{p.is_available ? 'Marcar agotado' : 'Disponible'}</Button>
-                    <IconButton label="Eliminar" disabled={!canWrite} onClick={() => setDel(p)} className="ml-auto"><Icon name="trash" className="h-4 w-4" /></IconButton>
+
+                  {(!p.is_available || !p.is_published) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {!p.is_available && <Pill tone="red">Agotado</Pill>}
+                      {!p.is_published && <Pill tone="amber">Oculto</Pill>}
+                    </div>
+                  )}
+
+                  <div className="mt-auto flex flex-wrap items-center gap-1 pt-2.5">
+                    <Button
+                      size="sm"
+                      variant={p.is_available ? 'ghost' : 'secondary'}
+                      disabled={!canWrite}
+                      onClick={() =>
+                        patch(
+                          p,
+                          { is_available: !p.is_available },
+                          p.is_available ? 'Marcado como agotado' : 'Disponible nuevamente'
+                        )
+                      }
+                      className="h-8 rounded-lg px-2.5 text-xs"
+                    >
+                      {p.is_available ? 'Marcar agotado' : 'Disponible'}
+                    </Button>
+
+                    <IconButton
+                      label="Editar"
+                      disabled={!canWrite}
+                      onClick={() => openEdit(p)}
+                    >
+                      <Icon name="edit" className="h-4 w-4" />
+                    </IconButton>
+
+                    <IconButton
+                      label="Duplicar"
+                      disabled={!canWrite || reached}
+                      onClick={() => duplicate(p)}
+                    >
+                      <Icon name="copy" className="h-4 w-4" />
+                    </IconButton>
+
+                    <IconButton
+                      label={p.is_published ? 'Ocultar temporalmente' : 'Publicar'}
+                      disabled={!canWrite}
+                      onClick={() =>
+                        patch(
+                          p,
+                          { is_published: !p.is_published },
+                          p.is_published ? 'Producto oculto' : 'Producto publicado'
+                        )
+                      }
+                    >
+                      <Icon name={p.is_published ? 'eye' : 'eyeoff'} className="h-4 w-4" />
+                    </IconButton>
+
+                    <IconButton
+                      label="Eliminar"
+                      disabled={!canWrite}
+                      onClick={() => setDel(p)}
+                      className="ml-auto text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <Icon name="trash" className="h-4 w-4" />
+                    </IconButton>
                   </div>
                 </div>
               </Card>
@@ -126,30 +386,133 @@ export default function ProductsPage() {
         </>
       )}
 
-      <Modal open={!!form} onClose={() => setForm(null)} title={form?.id ? 'Editar producto' : 'Nuevo producto'} size="lg"
-        footer={<><Button variant="secondary" onClick={() => setForm(null)}>Cancelar</Button><Button loading={busy} onClick={save}>Guardar</Button></>}>
-        {form && <>
-          <Field label="Nombre"><Input value={form.name} maxLength={120} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus /></Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={`Precio (${restaurant.currency})`}><Input value={form.price} inputMode="decimal" placeholder="0.00" onChange={(e) => setForm({ ...form, price: e.target.value })} /></Field>
-            <Field label="Categoría">
-              <Select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-                <option value="">Selecciona…</option>
-                {data?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </Select>
+      {canWrite && !reached && (
+        <button
+          type="button"
+          onClick={openNew}
+          aria-label="Nuevo producto"
+          className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-orange-500 to-orange-600 text-white shadow-xl shadow-orange-600/35 transition-all duration-150 hover:scale-105 hover:from-orange-600 hover:to-orange-700 active:scale-90 sm:hidden"
+        >
+          <Icon name="plus" className="h-6 w-6" />
+        </button>
+      )}
+
+      <Modal
+        open={!!form}
+        onClose={() => setForm(null)}
+        title={form?.id ? 'Editar producto' : 'Nuevo producto'}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setForm(null)} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+            <Button loading={busy} onClick={save} className="w-full sm:w-auto">
+              Guardar producto
+            </Button>
+          </>
+        }
+      >
+        {form && (
+          <>
+            <Field label="Nombre">
+              <Input
+                value={form.name}
+                maxLength={120}
+                placeholder="Ej. 1/4 de Pollo a la Brasa"
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                autoFocus
+              />
             </Field>
-          </div>
-          <Field label="Descripción" hint={`${form.description.length}/600`}><Textarea value={form.description} maxLength={600} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-          <ImageUpload restaurantId={restaurant.id} folder="products" label="Fotografía" value={form.image_url} onChange={(u) => setForm({ ...form, image_url: u })} />
-          <div className="flex flex-wrap gap-x-8 gap-y-3">
-            <Toggle checked={form.is_available} onChange={(v) => setForm({ ...form, is_available: v })} label="Disponible (si no, aparece “Agotado”)" />
-            <Toggle checked={form.is_published} onChange={(v) => setForm({ ...form, is_published: v })} label="Publicado en el menú" />
-          </div>
-          {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
-        </>}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={`Precio (${restaurant.currency})`}>
+                <Input
+                  value={form.price}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                />
+              </Field>
+              <Field label="Categoría">
+                <Select
+                  value={form.category_id}
+                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                >
+                  <option value="">Selecciona…</option>
+                  {data?.categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Descripción" hint={`${form.description.length}/600`}>
+              <Textarea
+                value={form.description}
+                maxLength={600}
+                placeholder="Incluye papas fritas, ensalada y cremas de la casa…"
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </Field>
+            <ImageUpload
+              restaurantId={restaurant.id}
+              folder="products"
+              label="Fotografía"
+              value={form.image_url}
+              onChange={(u) => setForm({ ...form, image_url: u })}
+            />
+            <div className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl bg-slate-50 p-3.5">
+              <Toggle
+                checked={form.is_available}
+                onChange={(v) => setForm({ ...form, is_available: v })}
+                label="Disponible (si no, aparece “Agotado”)"
+              />
+              <Toggle
+                checked={form.is_published}
+                onChange={(v) => setForm({ ...form, is_published: v })}
+                label="Publicado en el menú"
+              />
+            </div>
+            {err && (
+              <p role="alert" className="anim-pop-in rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">
+                {err}
+              </p>
+            )}
+          </>
+        )}
       </Modal>
-      <ConfirmDialog open={!!del} title="Eliminar producto" message={`¿Eliminar “${del?.name}”? Esta acción no se puede deshacer.`} onCancel={() => setDel(null)}
-        onConfirm={async () => { try { await unwrap(supabase.from('products').delete().eq('id', del!.id)); toast('Producto eliminado'); reload() } catch (e) { toast(errMsg(e), 'error') } setDel(null) }} />
+
+      {importing && (
+        <ImportMenuModal
+          restaurantId={restaurant.id}
+          currency={restaurant.currency}
+          existing={data?.categories ?? []}
+          slots={max < 0 ? -1 : Math.max(0, max - total)}
+          onClose={() => setImporting(false)}
+          onDone={() => {
+            setImporting(false)
+            reload()
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!del}
+        title="Eliminar producto"
+        message={`¿Eliminar “${del?.name}”? Esta acción no se puede deshacer.`}
+        onCancel={() => setDel(null)}
+        onConfirm={async () => {
+          try {
+            await unwrap(supabase.from('products').delete().eq('id', del!.id))
+            toast('Producto eliminado')
+            reload()
+          } catch (e) {
+            toast(errMsg(e), 'error')
+          }
+          setDel(null)
+        }}
+      />
     </div>
   )
 }

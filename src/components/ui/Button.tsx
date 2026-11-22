@@ -2,10 +2,14 @@ import type { ButtonHTMLAttributes } from 'react'
 import { Spinner } from './Feedback'
 
 const styles = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300',
-  secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-50',
-  danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
-  ghost: 'text-slate-600 hover:bg-slate-100 disabled:opacity-50',
+  primary:
+    'bg-gradient-to-b from-orange-500 to-orange-600 text-white shadow-sm shadow-orange-600/25 hover:-translate-y-0.5 hover:from-orange-600 hover:to-orange-700 hover:shadow-md hover:shadow-orange-600/30 active:translate-y-0 active:scale-[0.97] disabled:translate-y-0 disabled:scale-100 disabled:from-orange-300 disabled:to-orange-300 disabled:shadow-none',
+  secondary:
+    'bg-white text-slate-700 border border-slate-200/90 shadow-xs hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm active:translate-y-0 active:scale-[0.97] disabled:translate-y-0 disabled:scale-100 disabled:opacity-50',
+  danger:
+    'bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-sm shadow-rose-600/20 hover:-translate-y-0.5 hover:from-rose-600 hover:to-rose-700 hover:shadow-md hover:shadow-rose-600/25 active:translate-y-0 active:scale-[0.97] disabled:translate-y-0 disabled:scale-100 disabled:from-rose-300 disabled:to-rose-300',
+  ghost:
+    'text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:scale-95 disabled:scale-100 disabled:opacity-50',
 }
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -14,13 +18,22 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean
 }
 
-export function Button({ variant = 'primary', size = 'md', loading = false, className = '', children, disabled, type = 'button', ...rest }: Props) {
-  const sz = size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2 text-sm'
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  loading = false,
+  className = '',
+  children,
+  disabled,
+  type = 'button',
+  ...rest
+}: Props) {
+  const sz = size === 'sm' ? 'px-3 py-1.5 text-xs rounded-xl' : 'px-4 py-2.5 text-sm rounded-xl'
   return (
     <button
       type={type}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition disabled:cursor-not-allowed ${sz} ${styles[variant]} ${className}`}
+      className={`inline-flex select-none items-center justify-center gap-2 font-semibold transition-all duration-150 ease-out disabled:cursor-not-allowed ${sz} ${styles[variant]} ${className}`}
       {...rest}
     >
       {loading && <Spinner className="h-4 w-4" />}
@@ -29,10 +42,20 @@ export function Button({ variant = 'primary', size = 'md', loading = false, clas
   )
 }
 
-export function IconButton({ label, className = '', children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+export function IconButton({
+  label,
+  className = '',
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
-    <button type="button" title={label} aria-label={label}
-      className={`rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 ${className}`} {...rest}>
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      className={`select-none rounded-xl p-2 text-slate-500 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:bg-slate-100 hover:text-slate-900 active:translate-y-0 active:scale-90 disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      {...rest}
+    >
       {children}
     </button>
   )
