@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { money } from '@/lib/format'
 import { prettyTitle } from '@/lib/text'
-import { PAYMENT_LABELS, type DeliveryType, type PaymentMethod } from '@/lib/wa'
+import { googleMapsUrl, PAYMENT_LABELS, type DeliveryType, type PaymentMethod } from '@/lib/wa'
 
 interface OrderRow {
   id: string
@@ -13,6 +13,8 @@ interface OrderRow {
   delivery_type: DeliveryType
   address: string | null
   reference: string | null
+  latitude: number | null
+  longitude: number | null
   payment_method: PaymentMethod
   cash_amount: string | null
   notes: string | null
@@ -49,6 +51,7 @@ export default function OrderTicketPage() {
   }
 
   const cur = order.restaurants?.currency || 'S/'
+  const mapsLink = order.delivery_type === 'delivery' ? googleMapsUrl(order.latitude, order.longitude) : null
   const dateStr = new Date(order.created_at).toLocaleString('es-PE', {
     day: '2-digit',
     month: 'short',
@@ -78,6 +81,18 @@ export default function OrderTicketPage() {
                 <span className="font-semibold">Dirección:</span> {order.address}
                 {order.reference ? ` (Ref: ${order.reference})` : ''}
               </p>
+            )}
+            {mapsLink && (
+              <div className="pt-1">
+                <a
+                  href={mapsLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-orange-600"
+                >
+                  Ver ubicación exacta en Google Maps
+                </a>
+              </div>
             )}
             <p>
               <span className="font-semibold">Pago:</span> {PAYMENT_LABELS[order.payment_method]}

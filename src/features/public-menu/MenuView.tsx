@@ -6,6 +6,7 @@ import { prettySentence, prettyTitle } from '@/lib/text'
 import {
   buildOrderMessage,
   cleanPhone,
+  googleMapsUrl,
   PAYMENT_LABELS,
   whatsappUrl,
   type DeliveryType,
@@ -296,13 +297,16 @@ function CartSheet({
   const [customerName, setCustomerName] = useState('')
   const [address, setAddress] = useState('')
   const [reference, setReference] = useState('')
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [locLoading, setLocLoading] = useState(false)
+  const [locError, setLocError] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('yape_plin')
   const [cashAmount, setCashAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [sending, setSending] = useState(false)
 
   const branch = branches.find((b) => b.id === branchId)
-  const hasValidDelivery = deliveryType === 'pickup' || address.trim().length >= 4
+  const hasValidDelivery = deliveryType === 'pickup' || address.trim().length >= 4 || !!coords
   const canSend =
     cart.lines.length > 0 &&
     !!phone &&
@@ -311,12 +315,39 @@ function CartSheet({
     hasValidDelivery &&
     !sending
 
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setLocError('Tu navegador no soporta ubicación GPS.')
+      return
+    }
+    setLocLoading(true)
+    setLocError(null)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setLocLoading(false)
+      },
+      (err) => {
+        setLocLoading(false)
+        setLocError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Permiso de ubicación denegado. Puedes escribir tu dirección manualmente.'
+            : 'No se pudo obtener tu ubicación exacta.',
+        )
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
+  }
+
   async function send() {
     if (!phone || !canSend) return
     setSending(true)
 
     let orderNumber: number | null = null
     let ticketUrl: string | null = null
+    const lat = deliveryType === 'delivery' ? coords?.lat ?? null : null
+    const lng = deliveryType === 'delivery' ? coords?.lng ?? null : null
+    const locationUrl = deliveryType === 'delivery' ? googleMapsUrl(lat, lng) : null
 
     try {
       const { data, error } = await supabase
@@ -325,8 +356,10 @@ function CartSheet({
           restaurant_id: restaurantId,
           customer_name: customerName.trim(),
           delivery_type: deliveryType,
-          address: deliveryType === 'delivery' ? address.trim() : null,
+          address: deliveryType === 'delivery' ? (address.trim() || 'Ubicación por GPS') : null,
           reference: deliveryType === 'delivery' ? reference.trim() || null : null,
+          latitude: lat,
+          longitude: lng,
           payment_method: paymentMethod,
           cash_amount: paymentMethod === 'efectivo' ? cashAmount.trim() || null : null,
           notes: notes.trim() || null,
@@ -351,6 +384,7 @@ function CartSheet({
       branch: branch?.name,
       orderNumber,
       ticketUrl,
+      locationUrl,
       deliveryType,
       customerName,
       address,
@@ -391,7 +425,13 @@ function CartSheet({
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setDeliveryType(opt.id)}
+                  onClick={() => {
+                    setDeliveryType(opt.id)
+                    if (opt.id === 'pickup') {
+                      setCoords(null)
+                      setLocError(null)
+                    }
+                  }}
                   className={`rounded-lg py-2 text-xs font-semibold transition ${
                     deliveryType === opt.id
                       ? 'bg-[var(--btn)] text-[var(--on-btn)] shadow-sm'
@@ -425,7 +465,7 @@ function CartSheet({
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     maxLength={160}
-                    placeholder="Dirección de entrega *"
+                    placeholder={coords ? 'Dirección de entrega (opcional si usas GPS)' : 'Dirección de entrega *'}
                     className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
                   />
                   <input
@@ -436,6 +476,41 @@ function CartSheet({
                     placeholder="Referencia (opcional, ej.: frente al parque)"
                     className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
                   />
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] px-3.5 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold">
+                        {coords ? 'Ubicación exacta adjunta' : 'Ubicación exacta (opcional)'}
+                      </p>
+                      <p className="truncate text-[11px] text-[var(--card-muted)]">
+                        {coords
+                          ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+                          : 'Comparte tu pin de GPS para facilitar el envío'}
+                      </p>
+                    </div>
+
+                    {coords ? (
+                      <button
+                        type="button"
+                        onClick={() => { setCoords(null); setLocError(null) }}
+                        className="rounded-lg border border-[var(--card-border)] px-2.5 py-1.5 text-xs font-medium text-[var(--card-muted)] hover:text-[var(--card-text)]"
+                      >
+                        Quitar
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={requestLocation}
+                        disabled={locLoading}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--primary)] disabled:opacity-40"
+                      >
+                        <Icon name="location" className="h-3.5 w-3.5" />
+                        {locLoading ? 'Obteniendo...' : 'Usar ubicación'}
+                      </button>
+                    )}
+                  </div>
+
+                  {locError && <p className="text-xs text-red-500">{locError}</p>}
                 </>
               )}
             </div>
@@ -540,7 +615,7 @@ function CartSheet({
         {!phone && <p className="text-xs text-red-500">Este restaurante aún no configuró su WhatsApp.</p>}
         {phone && cart.lines.length > 0 && !canSend && (
           <p className="text-xs text-[var(--card-muted)]">
-            Completa tu nombre{deliveryType === 'delivery' ? ' y dirección' : ''} para enviar el pedido.
+            Completa tu nombre{deliveryType === 'delivery' ? ' y dirección o ubicación GPS' : ''} para enviar el pedido.
           </p>
         )}
 

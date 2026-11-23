@@ -19,11 +19,17 @@ export function cleanPhone(raw: string): string {
   return cc && d.length <= 9 ? cc + d : d
 }
 
+export function googleMapsUrl(lat?: number | null, lng?: number | null): string | null {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null
+  return `https://www.google.com/maps?q=${lat},${lng}`
+}
+
 export function buildOrderMessage(o: {
   restaurant: string
   branch?: string | null
   orderNumber?: number | null
   ticketUrl?: string | null
+  locationUrl?: string | null
   deliveryType: DeliveryType
   customerName: string
   address?: string
@@ -43,6 +49,7 @@ export function buildOrderMessage(o: {
           `*Entrega:* Delivery`,
           `*Cliente:* ${o.customerName.trim()}`,
           `*Dirección:* ${o.address?.trim() || ''}${o.reference?.trim() ? ` (Ref: ${o.reference.trim()})` : ''}`,
+          ...(o.locationUrl ? [`*Ubicación GPS:* ${o.locationUrl}`] : []),
         ]
       : [
           `*Entrega:* Recojo en tienda`,
