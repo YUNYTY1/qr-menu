@@ -32,6 +32,7 @@ export function buildOrderMessage(o: {
   locationUrl?: string | null
   deliveryType: DeliveryType
   customerName: string
+  customerPhone?: string
   address?: string
   reference?: string
   paymentMethod: PaymentMethod
@@ -42,18 +43,21 @@ export function buildOrderMessage(o: {
   notes?: string
 }): string {
   const rows = o.lines.map((l) => `• ${l.qty}x ${l.name} — ${o.currency} ${(l.price * l.qty).toFixed(2)}`)
+  const cleanCustPhone = o.customerPhone?.trim() || ''
 
   const deliveryLines =
     o.deliveryType === 'delivery'
       ? [
           `*Entrega:* Delivery`,
           `*Cliente:* ${o.customerName.trim()}`,
+          ...(cleanCustPhone ? [`*Teléfono:* ${cleanCustPhone}`] : []),
           `*Dirección:* ${o.address?.trim() || ''}${o.reference?.trim() ? ` (Ref: ${o.reference.trim()})` : ''}`,
           ...(o.locationUrl ? [`*Ubicación GPS:* ${o.locationUrl}`] : []),
         ]
       : [
           `*Entrega:* Recojo en tienda`,
           `*Cliente:* ${o.customerName.trim()}`,
+          ...(cleanCustPhone ? [`*Teléfono:* ${cleanCustPhone}`] : []),
         ]
 
   const paymentLine =

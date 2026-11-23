@@ -184,6 +184,7 @@ function Inner({ data, slug, preview }: Props) {
           onBranch={chooseBranch}
           phone={contact}
           onClose={() => setCartOpen(false)}
+          onSent={() => { cart.clear(); setCartOpen(false) }}
         />
       )}
     </div>
@@ -282,6 +283,7 @@ function CartSheet({
   onBranch,
   phone,
   onClose,
+  onSent,
 }: {
   restaurantId: string
   restaurant: string
@@ -291,10 +293,12 @@ function CartSheet({
   onBranch: (id: string) => void
   phone: string | null | undefined
   onClose: () => void
+  onSent: () => void
 }) {
   const cart = useCart()
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery')
   const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
   const [address, setAddress] = useState('')
   const [reference, setReference] = useState('')
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
@@ -307,11 +311,13 @@ function CartSheet({
 
   const branch = branches.find((b) => b.id === branchId)
   const hasValidDelivery = deliveryType === 'pickup' || address.trim().length >= 4 || !!coords
+  const hasValidPhone = deliveryType === 'pickup' || customerPhone.replace(/\D/g, '').length >= 7
   const canSend =
     cart.lines.length > 0 &&
     !!phone &&
     cleanPhone(phone).length >= 9 &&
     customerName.trim().length >= 2 &&
+    hasValidPhone &&
     hasValidDelivery &&
     !sending
 
@@ -355,6 +361,7 @@ function CartSheet({
         .insert({
           restaurant_id: restaurantId,
           customer_name: customerName.trim(),
+          customer_phone: customerPhone.trim() || null,
           delivery_type: deliveryType,
           address: deliveryType === 'delivery' ? (address.trim() || 'Ubicación por GPS') : null,
           reference: deliveryType === 'delivery' ? reference.trim() || null : null,
@@ -387,6 +394,7 @@ function CartSheet({
       locationUrl,
       deliveryType,
       customerName,
+      customerPhone,
       address,
       reference,
       paymentMethod,
@@ -398,6 +406,9 @@ function CartSheet({
     })
 
     window.open(whatsappUrl(phone, text), '_blank', 'noopener')
+    setTimeout(() => {
+      onSent()
+    }, 150)
   }
 
   return (
@@ -455,6 +466,16 @@ function CartSheet({
                 onChange={(e) => setCustomerName(e.target.value)}
                 maxLength={80}
                 placeholder="Nombre y apellido *"
+                className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
+              />
+
+              <input
+                type="tel"
+                inputMode="tel"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                maxLength={20}
+                placeholder={deliveryType === 'delivery' ? 'Celular para el delivery *' : 'Celular de contacto (opcional)'}
                 className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
               />
 
@@ -615,7 +636,7 @@ function CartSheet({
         {!phone && <p className="text-xs text-red-500">Este restaurante aún no configuró su WhatsApp.</p>}
         {phone && cart.lines.length > 0 && !canSend && (
           <p className="text-xs text-[var(--card-muted)]">
-            Completa tu nombre{deliveryType === 'delivery' ? ' y dirección o ubicación GPS' : ''} para enviar el pedido.
+            Completa tu nombre{deliveryType === 'delivery' ? ', celular y dirección o ubicación GPS' : ''} para enviar el pedido.
           </p>
         )}
 

@@ -3,13 +3,14 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { money } from '@/lib/format'
 import { prettyTitle } from '@/lib/text'
-import { googleMapsUrl, PAYMENT_LABELS, type DeliveryType, type PaymentMethod } from '@/lib/wa'
+import { cleanPhone, googleMapsUrl, PAYMENT_LABELS, type DeliveryType, type PaymentMethod } from '@/lib/wa'
 
 interface OrderRow {
   id: string
   order_number: number
   restaurant_id: string
   customer_name: string
+  customer_phone: string | null
   delivery_type: DeliveryType
   address: string | null
   reference: string | null
@@ -52,6 +53,9 @@ export default function OrderTicketPage() {
 
   const cur = order.restaurants?.currency || 'S/'
   const mapsLink = order.delivery_type === 'delivery' ? googleMapsUrl(order.latitude, order.longitude) : null
+  const rawPhone = order.customer_phone?.trim() || ''
+  const telDigits = rawPhone.replace(/\D/g, '')
+  const waClientPhone = rawPhone ? cleanPhone(rawPhone) : ''
   const dateStr = new Date(order.created_at).toLocaleString('es-PE', {
     day: '2-digit',
     month: 'short',
@@ -76,25 +80,50 @@ export default function OrderTicketPage() {
           <div className="rounded-2xl bg-stone-50 p-4 text-sm space-y-1.5">
             <p><span className="font-semibold">Modalidad:</span> {order.delivery_type === 'delivery' ? 'Delivery' : 'Recojo en tienda'}</p>
             <p><span className="font-semibold">Cliente:</span> {order.customer_name}</p>
+            {rawPhone && (
+              <p><span className="font-semibold">Teléfono:</span> {rawPhone}</p>
+            )}
             {order.delivery_type === 'delivery' && order.address && (
               <p>
                 <span className="font-semibold">Dirección:</span> {order.address}
                 {order.reference ? ` (Ref: ${order.reference})` : ''}
               </p>
             )}
-            {mapsLink && (
-              <div className="pt-1">
-                <a
-                  href={mapsLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-orange-600"
-                >
-                  Ver ubicación exacta en Google Maps
-                </a>
+
+            {(mapsLink || telDigits) && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {mapsLink && (
+                  <a
+                    href={mapsLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-3.5 py-2 text-xs font-semibold text-white hover:bg-orange-600"
+                  >
+                    Ver ubicación en Maps
+                  </a>
+                )}
+                {telDigits && (
+                  <a
+                    href={`tel:${rawPhone}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-stone-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-stone-800"
+                  >
+                    Llamar al cliente
+                  </a>
+                )}
+                {waClientPhone && (
+                  <a
+                    href={`https://wa.me/${waClientPhone}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3.5 py-2 text-xs font-semibold text-stone-800 hover:bg-stone-100"
+                  >
+                    WhatsApp cliente
+                  </a>
+                )}
               </div>
             )}
-            <p>
+
+            <p className="pt-1">
               <span className="font-semibold">Pago:</span> {PAYMENT_LABELS[order.payment_method]}
               {order.payment_method === 'efectivo' && order.cash_amount ? ` (paga con ${cur} ${order.cash_amount})` : ''}
             </p>
