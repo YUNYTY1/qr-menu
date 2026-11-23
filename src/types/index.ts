@@ -95,6 +95,10 @@ export interface Product {
   sort_order: number
 }
 
+export type BgMode = 'plantilla' | 'color' | 'degradado' | 'textura'
+export type BgGradient = 'atardecer' | 'oceano' | 'menta' | 'rosa' | 'arena' | 'noche' | 'bosque' | 'vino' | 'uva'
+export type BgTexture = 'puntos' | 'lineas' | 'cuadricula' | 'papel'
+
 export interface Theme {
   restaurant_id?: string
   template: 'clasico' | 'moderno' | 'oscuro' | 'elegante'
@@ -104,6 +108,10 @@ export interface Theme {
   font: 'Inter' | 'Poppins' | 'Montserrat' | 'Playfair Display' | 'Lora'
   card_style: 'redondeada' | 'plana' | 'sombra'
   layout: 'cuadricula' | 'lista' | 'grande'
+  bg_mode: BgMode
+  bg_color: string
+  bg_gradient: BgGradient
+  bg_texture: BgTexture
 }
 
 export interface Promotion {

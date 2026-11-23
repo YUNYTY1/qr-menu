@@ -2,7 +2,10 @@ import { useMemo, useState } from 'react'
 import { supabase, unwrap } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
 import { useData } from '@/hooks/useData'
-import { CARD_STYLES, DEFAULT_THEME, FONTS, LAYOUTS, TEMPLATES } from '@/lib/theme'
+import {
+  BG_MODES, CARD_STYLES, DEFAULT_THEME, FONTS, GRADIENTS, LAYOUTS, TEMPLATES, TEXTURES,
+  gradientCss, isDarkColor, textureStyle,
+} from '@/lib/theme'
 import { todayLima } from '@/lib/format'
 import type { Branch, Category, Product, Promotion, PublicMenuData, Theme } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -59,7 +62,7 @@ function Editor({ data, canWrite, advanced, onSaved }: {
   }), [restaurant, logo, cover, theme, data, t])
 
   async function save() {
-    for (const k of ['primary_color', 'secondary_color', 'button_color'] as const)
+    for (const k of ['primary_color', 'secondary_color', 'button_color', 'bg_color'] as const)
       if (!HEX.test(theme[k])) return toast('Los colores deben tener formato #RRGGBB', 'error')
     setBusy(true)
     try {
@@ -69,6 +72,9 @@ function Editor({ data, canWrite, advanced, onSaved }: {
       onSaved()
     } catch (e) { toast(errMsg(e), 'error') } finally { setBusy(false) }
   }
+
+  const optBtn = (active: boolean) =>
+    `overflow-hidden rounded-xl border text-center text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-200 hover:border-slate-300'}`
 
   return (
     <div>
@@ -85,7 +91,7 @@ function Editor({ data, canWrite, advanced, onSaved }: {
             <ColorField label="Color principal" value={theme.primary_color} onChange={(v) => set('primary_color', v)} disabled={!canWrite} />
           </Card>
 
-          <Card className="space-y-4">
+          <Card className="space-y-5">
             <div>
               <h2 className="font-semibold">Estilo avanzado</h2>
               {!advanced && <p className="mt-1 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Disponible en el plan Profesional o superior.</p>}
@@ -114,12 +120,51 @@ function Editor({ data, canWrite, advanced, onSaved }: {
                 </Select>
               </Field>
             </div>
+
+            <div className="space-y-3 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold">Fondo del menú</h3>
+              <Field label="Tipo de fondo">
+                <Select value={theme.bg_mode} disabled={lock} onChange={(e) => set('bg_mode', e.target.value as Theme['bg_mode'])}>
+                  {BG_MODES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                </Select>
+              </Field>
+
+              {theme.bg_mode === 'color' && (
+                <ColorField label="Color de fondo" value={theme.bg_color} onChange={(v) => set('bg_color', v)} disabled={lock} />
+              )}
+
+              {theme.bg_mode === 'degradado' && (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {GRADIENTS.map((g) => (
+                    <button key={g.id} type="button" disabled={lock} onClick={() => set('bg_gradient', g.id)} className={optBtn(theme.bg_gradient === g.id)}>
+                      <span className="block h-12" style={{ background: gradientCss(g) }} />
+                      <span className="block bg-white py-1 text-slate-700">{g.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {theme.bg_mode === 'textura' && (
+                <>
+                  <ColorField label="Color base" value={theme.bg_color} onChange={(v) => set('bg_color', v)} disabled={lock} />
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {TEXTURES.map((x) => (
+                      <button key={x.id} type="button" disabled={lock} onClick={() => set('bg_texture', x.id)} className={optBtn(theme.bg_texture === x.id)}>
+                        <span className="block h-12" style={{ backgroundColor: theme.bg_color, ...textureStyle(x.id, isDarkColor(theme.bg_color)) }} />
+                        <span className="block bg-white py-1 text-slate-700">{x.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              <p className="text-xs text-slate-500">El texto cambia solo a claro u oscuro para que siempre se lea bien sobre tu fondo.</p>
+            </div>
           </Card>
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">
           <p className="mb-2 text-sm font-medium text-slate-600">Vista previa</p>
-          <div className="mx-auto h-[640px] w-[320px] overflow-hidden rounded-[2.2rem] border-[10px] border-slate-900 bg-white shadow-2xl">
+          <div className="mx-auto h-[600px] w-full max-w-[340px] overflow-hidden rounded-[2rem] border-[8px] border-slate-900 bg-white shadow-2xl">
             <div className="h-full overflow-y-auto">
               <MenuView data={preview} slug={restaurant.slug} preview />
             </div>
