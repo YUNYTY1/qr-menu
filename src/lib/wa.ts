@@ -1,4 +1,17 @@
-export interface OrderLine { name: string; price: number; qty: number }
+export interface OrderLine {
+  name: string
+  price: number
+  qty: number
+}
+
+export type DeliveryType = 'delivery' | 'pickup'
+export type PaymentMethod = 'yape_plin' | 'efectivo' | 'tarjeta'
+
+export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  yape_plin: 'Yape / Plin',
+  efectivo: 'Efectivo',
+  tarjeta: 'Tarjeta',
+}
 
 export function cleanPhone(raw: string): string {
   const d = raw.replace(/\D/g, '')
@@ -7,16 +20,56 @@ export function cleanPhone(raw: string): string {
 }
 
 export function buildOrderMessage(o: {
-  restaurant: string; branch?: string | null; lines: OrderLine[]; total: number; currency: string; notes?: string
+  restaurant: string
+  branch?: string | null
+  orderNumber?: number | null
+  ticketUrl?: string | null
+  deliveryType: DeliveryType
+  customerName: string
+  address?: string
+  reference?: string
+  paymentMethod: PaymentMethod
+  cashAmount?: string
+  lines: OrderLine[]
+  total: number
+  currency: string
+  notes?: string
 }): string {
-  const rows = o.lines.map((l) => `• ${l.qty} x ${l.name} — ${o.currency} ${(l.price * l.qty).toFixed(2)}`)
+  const rows = o.lines.map((l) => `• ${l.qty}x ${l.name} — ${o.currency} ${(l.price * l.qty).toFixed(2)}`)
+
+  const deliveryLines =
+    o.deliveryType === 'delivery'
+      ? [
+          `*Entrega:* Delivery`,
+          `*Cliente:* ${o.customerName.trim()}`,
+          `*Dirección:* ${o.address?.trim() || ''}${o.reference?.trim() ? ` (Ref: ${o.reference.trim()})` : ''}`,
+        ]
+      : [
+          `*Entrega:* Recojo en tienda`,
+          `*Cliente:* ${o.customerName.trim()}`,
+        ]
+
+  const paymentLine =
+    o.paymentMethod === 'efectivo' && o.cashAmount?.trim()
+      ? `*Pago:* Efectivo (paga con ${o.currency} ${o.cashAmount.trim()})`
+      : `*Pago:* ${PAYMENT_LABELS[o.paymentMethod]}`
+
+  const header = o.orderNumber
+    ? `*🧾 NUEVO PEDIDO #${o.orderNumber} — ${o.restaurant}*${o.branch ? ` (${o.branch})` : ''}`
+    : `*🧾 NUEVO PEDIDO — ${o.restaurant}*${o.branch ? ` (${o.branch})` : ''}`
+
   return [
-    `Hola, quiero hacer un pedido en *${o.restaurant}*${o.branch ? ` (${o.branch})` : ''}:`,
+    header,
     '',
+    '*Productos:*',
     ...rows,
     '',
+    ...deliveryLines,
+    paymentLine,
+    ...(o.notes?.trim() ? [`*Indicaciones:* ${o.notes.trim()}`] : []),
+    '',
     `*Total estimado: ${o.currency} ${o.total.toFixed(2)}*`,
-    ...(o.notes?.trim() ? ['', `Indicaciones: ${o.notes.trim()}`] : []),
+    ...(o.ticketUrl ? ['', '📲 *Ver comanda / ticket:*', o.ticketUrl] : []),
   ].join('\n')
 }
 

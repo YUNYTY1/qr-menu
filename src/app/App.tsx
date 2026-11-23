@@ -6,6 +6,7 @@ import LoginPage from '@/features/auth/LoginPage'
 import ResetPasswordPage from '@/features/auth/ResetPasswordPage'
 import { ToastProvider } from '@/components/ui/Feedback'
 import PublicMenuPage from '@/features/public-menu/PublicMenuPage'
+import OrderTicketPage from '@/features/public-menu/OrderTicketPage'
 import SuperLayout from '@/features/superadmin/SuperLayout'
 import DashboardPage from '@/features/superadmin/DashboardPage'
 import RestaurantsPage from '@/features/superadmin/RestaurantsPage'
@@ -54,9 +55,10 @@ export default function App() {
             <Route path="/registro" element={<RegisterPage />} />
             <Route path="/empezar" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
             <Route path="/m/:slug" element={<PublicMenuRoute />} />
+            <Route path="/pedido/:id" element={<OrderTicketPage />} />
 
             <Route path="/superadmin" element={<RequireSuperadmin><SuperLayout /></RequireSuperadmin>}>
-            <Route path="payments" element={<PaymentsPage />} />
+              <Route path="payments" element={<PaymentsPage />} />
               <Route index element={<DashboardPage />} />
               <Route path="restaurants" element={<RestaurantsPage />} />
               <Route path="restaurants/:id" element={<RestaurantDetailPage />} />
@@ -65,7 +67,7 @@ export default function App() {
 
             <Route path="/panel" element={<HomeRedirect />} />
             <Route path="/panel/:rid" element={<RequireAuth><PanelLayout /></RequireAuth>}>
-            <Route path="plan" element={<PlanPage />} />
+              <Route path="plan" element={<PlanPage />} />
               <Route index element={<Navigate to="products" replace />} />
               <Route path="categories" element={<CategoriesPage />} />
               <Route path="products" element={<ProductsPage />} />

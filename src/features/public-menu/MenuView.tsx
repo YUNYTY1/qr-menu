@@ -3,7 +3,14 @@ import type { Branch, Product, PublicMenuData, Theme } from '@/types'
 import { loadFont, themeVars } from '@/lib/theme'
 import { money } from '@/lib/format'
 import { prettySentence, prettyTitle } from '@/lib/text'
-import { buildOrderMessage, cleanPhone, whatsappUrl } from '@/lib/wa'
+import {
+  buildOrderMessage,
+  cleanPhone,
+  PAYMENT_LABELS,
+  whatsappUrl,
+  type DeliveryType,
+  type PaymentMethod,
+} from '@/lib/wa'
 import { supabase } from '@/lib/supabase'
 import Icon from '@/components/ui/Icon'
 import { CartProvider, useCart } from './cart'
@@ -58,7 +65,6 @@ function Inner({ data, slug, preview }: Props) {
     track(slug, { product: p.id })
   }
 
-  // En la vista previa se usan siempre los tamaños de celular (no dependen del ancho de tu pantalla)
   const grid = theme.layout === 'cuadricula'
     ? `grid grid-cols-2 items-stretch gap-3 ${preview ? '' : 'sm:grid-cols-3'}`
     : theme.layout === 'grande' ? 'grid grid-cols-1 gap-4' : 'flex flex-col gap-3'
@@ -168,8 +174,16 @@ function Inner({ data, slug, preview }: Props) {
 
       {selected && <ProductSheet p={selected} cur={cur} onClose={() => setSelected(null)} onAdd={() => { cart.add(selected); setSelected(null) }} />}
       {cartOpen && (
-        <CartSheet restaurant={r.name} cur={cur} branches={branches} branchId={branch?.id ?? null} onBranch={chooseBranch}
-          phone={contact} onClose={() => setCartOpen(false)} />
+        <CartSheet
+          restaurantId={r.id}
+          restaurant={r.name}
+          cur={cur}
+          branches={branches}
+          branchId={branch?.id ?? null}
+          onBranch={chooseBranch}
+          phone={contact}
+          onClose={() => setCartOpen(false)}
+        />
       )}
     </div>
   )
@@ -190,7 +204,6 @@ function ProductCard({ p, theme, cur, onOpen, onAdd }: { p: Product; theme: Them
     : theme.card_style === 'sombra'
       ? 'rounded-xl bg-[var(--surface)] shadow-md'
       : 'rounded-2xl border border-[var(--card-border)] bg-[var(--surface)]'
-  // En estilo "plana" la tarjeta no tiene fondo propio: el texto usa los colores de la página
   const ink = plana ? 'text-[var(--text)]' : 'text-[var(--card-text)]'
   const soft = plana ? 'text-[var(--muted)]' : 'text-[var(--card-muted)]'
   const imgR = plana ? 'rounded-lg' : ''
@@ -259,67 +272,292 @@ function ProductSheet({ p, cur, onClose, onAdd }: { p: Product; cur: string; onC
   )
 }
 
-function CartSheet({ restaurant, cur, branches, branchId, onBranch, phone, onClose }: {
-  restaurant: string; cur: string; branches: Branch[]; branchId: string | null; onBranch: (id: string) => void
-  phone: string | null | undefined; onClose: () => void
+function CartSheet({
+  restaurantId,
+  restaurant,
+  cur,
+  branches,
+  branchId,
+  onBranch,
+  phone,
+  onClose,
+}: {
+  restaurantId: string
+  restaurant: string
+  cur: string
+  branches: Branch[]
+  branchId: string | null
+  onBranch: (id: string) => void
+  phone: string | null | undefined
+  onClose: () => void
 }) {
   const cart = useCart()
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>('delivery')
+  const [customerName, setCustomerName] = useState('')
+  const [address, setAddress] = useState('')
+  const [reference, setReference] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('yape_plin')
+  const [cashAmount, setCashAmount] = useState('')
   const [notes, setNotes] = useState('')
-  const branch = branches.find((b) => b.id === branchId)
-  const canSend = cart.lines.length > 0 && !!phone && cleanPhone(phone).length >= 9
+  const [sending, setSending] = useState(false)
 
-  function send() {
-    if (!phone) return
-    const text = buildOrderMessage({ restaurant, branch: branch?.name, lines: cart.lines, total: cart.total, currency: cur, notes })
+  const branch = branches.find((b) => b.id === branchId)
+  const hasValidDelivery = deliveryType === 'pickup' || address.trim().length >= 4
+  const canSend =
+    cart.lines.length > 0 &&
+    !!phone &&
+    cleanPhone(phone).length >= 9 &&
+    customerName.trim().length >= 2 &&
+    hasValidDelivery &&
+    !sending
+
+  async function send() {
+    if (!phone || !canSend) return
+    setSending(true)
+
+    let orderNumber: number | null = null
+    let ticketUrl: string | null = null
+
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .insert({
+          restaurant_id: restaurantId,
+          customer_name: customerName.trim(),
+          delivery_type: deliveryType,
+          address: deliveryType === 'delivery' ? address.trim() : null,
+          reference: deliveryType === 'delivery' ? reference.trim() || null : null,
+          payment_method: paymentMethod,
+          cash_amount: paymentMethod === 'efectivo' ? cashAmount.trim() || null : null,
+          notes: notes.trim() || null,
+          items: cart.lines,
+          total: cart.total,
+        })
+        .select('id, order_number')
+        .single()
+
+      if (!error && data) {
+        orderNumber = data.order_number
+        ticketUrl = `${window.location.origin}/pedido/${data.id}`
+      }
+    } catch {
+      // Si falla el guardado, igual abrimos WhatsApp para no perder la venta
+    } finally {
+      setSending(false)
+    }
+
+    const text = buildOrderMessage({
+      restaurant,
+      branch: branch?.name,
+      orderNumber,
+      ticketUrl,
+      deliveryType,
+      customerName,
+      address,
+      reference,
+      paymentMethod,
+      cashAmount,
+      lines: cart.lines,
+      total: cart.total,
+      currency: cur,
+      notes,
+    })
+
     window.open(whatsappUrl(phone, text), '_blank', 'noopener')
   }
 
   return (
     <Sheet onClose={onClose} title="Tu pedido">
-      <div className="flex items-center justify-between border-b border-[var(--card-border)] p-5">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--surface)] p-5">
         <h2 className="text-lg font-bold">Tu pedido</h2>
         <button onClick={onClose} aria-label="Cerrar"><Icon name="close" /></button>
       </div>
+
       <div className="space-y-4 p-5">
-        {cart.lines.length === 0 && <p className="py-6 text-center text-sm text-[var(--card-muted)]">Tu pedido está vacío.</p>}
-        {cart.lines.map((l) => (
-          <div key={l.id} className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{prettyTitle(l.name)}</p>
-              <p className="text-xs text-[var(--card-muted)]">{money(cur, l.price)} c/u</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => cart.setQty(l.id, l.qty - 1)} aria-label="Quitar uno" className="h-8 w-8 rounded-full border border-[var(--card-border)] text-lg leading-none">−</button>
-              <span className="w-5 text-center text-sm font-semibold">{l.qty}</span>
-              <button onClick={() => cart.setQty(l.id, l.qty + 1)} aria-label="Agregar uno" className="h-8 w-8 rounded-full border border-[var(--card-border)] text-lg leading-none">+</button>
-            </div>
-            <p className="w-20 text-right text-sm font-bold">{money(cur, l.price * l.qty)}</p>
-          </div>
-        ))}
-        {branches.length > 1 && (
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Sucursal</span>
-            <select value={branchId ?? ''} onChange={(e) => onBranch(e.target.value)} className="w-full rounded-lg border border-[var(--card-border)] bg-transparent px-3 py-2">
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </label>
+        {cart.lines.length === 0 && (
+          <p className="py-6 text-center text-sm text-[var(--card-muted)]">Tu pedido está vacío.</p>
         )}
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Indicaciones (opcional)</span>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={300} placeholder="Ej.: sin ají, para recoger en 20 min"
-            className="w-full rounded-lg border border-[var(--card-border)] bg-transparent px-3 py-2" />
-        </label>
+
+        {/* Modalidad de entrega */}
+        {cart.lines.length > 0 && (
+          <>
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--card-border)] p-1">
+              {(
+                [
+                  { id: 'delivery', label: 'Delivery' },
+                  { id: 'pickup', label: 'Recojo en tienda' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDeliveryType(opt.id)}
+                  className={`rounded-lg py-2 text-xs font-semibold transition ${
+                    deliveryType === opt.id
+                      ? 'bg-[var(--btn)] text-[var(--on-btn)] shadow-sm'
+                      : 'text-[var(--card-muted)] hover:text-[var(--card-text)]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Datos de entrega */}
+            <div className="space-y-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--card-muted)]">
+                Detalle de entrega
+              </p>
+
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                maxLength={80}
+                placeholder="Nombre y apellido *"
+                className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
+              />
+
+              {deliveryType === 'delivery' && (
+                <>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    maxLength={160}
+                    placeholder="Dirección de entrega *"
+                    className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
+                  />
+                  <input
+                    type="text"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    maxLength={120}
+                    placeholder="Referencia (opcional, ej.: frente al parque)"
+                    className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
+                  />
+                </>
+              )}
+            </div>
+
+            {branches.length > 1 && (
+              <label className="block text-sm">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--card-muted)]">Sucursal</span>
+                <select
+                  value={branchId ?? ''}
+                  onChange={(e) => onBranch(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--card-border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm"
+                >
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </label>
+            )}
+
+            {/* Resumen de productos */}
+            <div className="space-y-3 border-t border-[var(--card-border)] pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--card-muted)]">
+                Resumen del pedido
+              </p>
+              {cart.lines.map((l) => (
+                <div key={l.id} className="flex items-center gap-3">
+                  {l.image_url && (
+                    <img
+                      src={l.image_url}
+                      alt={prettyTitle(l.name)}
+                      className="h-11 w-11 shrink-0 rounded-xl object-cover bg-[var(--secondary)]"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{prettyTitle(l.name)}</p>
+                    <p className="text-xs text-[var(--card-muted)]">{money(cur, l.price)} c/u</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => cart.setQty(l.id, l.qty - 1)} aria-label="Quitar uno" className="h-7 w-7 rounded-full border border-[var(--card-border)] text-base leading-none">−</button>
+                    <span className="w-5 text-center text-sm font-semibold">{l.qty}</span>
+                    <button onClick={() => cart.setQty(l.id, l.qty + 1)} aria-label="Agregar uno" className="h-7 w-7 rounded-full border border-[var(--card-border)] text-base leading-none">+</button>
+                  </div>
+                  <p className="w-16 text-right text-sm font-bold">{money(cur, l.price * l.qty)}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Indicaciones */}
+            <label className="block text-sm">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--card-muted)]">Indicaciones (opcional)</span>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                maxLength={300}
+                placeholder="Ej.: con ají, sin ensalada, timbre malogrado"
+                className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2 text-sm outline-none focus:border-[var(--primary)]"
+              />
+            </label>
+
+            {/* Método de pago */}
+            <div className="space-y-2.5 border-t border-[var(--card-border)] pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--card-muted)]">
+                Método de pago
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {(['yape_plin', 'efectivo', 'tarjeta'] as const).map((pm) => (
+                  <button
+                    key={pm}
+                    type="button"
+                    onClick={() => setPaymentMethod(pm)}
+                    className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition ${
+                      paymentMethod === pm
+                        ? 'border-[var(--btn)] bg-[var(--btn)] text-[var(--on-btn)]'
+                        : 'border-[var(--card-border)] text-[var(--card-text)] hover:border-[var(--primary)]'
+                    }`}
+                  >
+                    {PAYMENT_LABELS[pm]}
+                  </button>
+                ))}
+              </div>
+
+              {paymentMethod === 'efectivo' && (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={cashAmount}
+                  onChange={(e) => setCashAmount(e.target.value)}
+                  maxLength={12}
+                  placeholder={`¿Con cuánto pagas? (opcional, ej.: 50)`}
+                  className="w-full rounded-xl border border-[var(--card-border)] bg-transparent px-3.5 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
+                />
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Total y envío */}
         <div className="flex items-center justify-between border-t border-[var(--card-border)] pt-4">
           <span className="text-sm text-[var(--card-muted)]">Total estimado</span>
           <span className="text-xl font-bold">{money(cur, cart.total)}</span>
         </div>
+
         {!phone && <p className="text-xs text-red-500">Este restaurante aún no configuró su WhatsApp.</p>}
-        <button onClick={send} disabled={!canSend}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--btn)] py-3.5 font-semibold text-[var(--on-btn)] disabled:opacity-40">
-          <Icon name="chat" /> Enviar pedido por WhatsApp
+        {phone && cart.lines.length > 0 && !canSend && (
+          <p className="text-xs text-[var(--card-muted)]">
+            Completa tu nombre{deliveryType === 'delivery' ? ' y dirección' : ''} para enviar el pedido.
+          </p>
+        )}
+
+        <button
+          onClick={send}
+          disabled={!canSend}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--btn)] py-3.5 font-semibold text-[var(--on-btn)] disabled:opacity-40"
+        >
+          <Icon name="chat" /> {sending ? 'Generando pedido...' : 'Enviar pedido por WhatsApp'}
         </button>
+
         <p className="text-center text-xs text-[var(--card-muted)]">Se abrirá WhatsApp con tu pedido listo. Tú lo envías.</p>
-        {cart.lines.length > 0 && <button onClick={cart.clear} className="w-full text-center text-xs text-[var(--card-muted)] underline">Vaciar pedido</button>}
+        {cart.lines.length > 0 && (
+          <button onClick={cart.clear} className="w-full text-center text-xs text-[var(--card-muted)] underline">
+            Vaciar pedido
+          </button>
+        )}
       </div>
     </Sheet>
   )
