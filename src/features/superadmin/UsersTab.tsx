@@ -65,7 +65,7 @@ export default function UsersTab({ restaurantId }: { restaurantId: string }) {
         <Field label="Contraseña inicial" hint="Mínimo 8 caracteres. El cliente puede cambiarla con “Olvidé mi contraseña”."><Input type="text" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
         {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
       </Modal>
-      <ConfirmDialog open={!!del} title="Quitar acceso" confirmLabel="Quitar" message={`${prof(del!)?.email ?? ''} dejará de poder entrar a este restaurante. La cuenta no se elimina.`}
+            <ConfirmDialog open={!!del} title="Quitar acceso" confirmLabel="Quitar" message={del ? `${prof(del)?.email ?? ''} dejará de poder entrar a este restaurante. La cuenta no se elimina.` : ''}
         onCancel={() => setDel(null)}
         onConfirm={async () => { try { await unwrap(supabase.from('restaurant_users').delete().eq('restaurant_id', restaurantId).eq('user_id', del!.user_id)); toast('Acceso removido'); reload() } catch (e) { toast(errMsg(e), 'error') } setDel(null) }} />
     </Card>
