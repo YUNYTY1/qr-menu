@@ -5,7 +5,7 @@ import { errMsg } from '@/lib/errors'
 import { money } from '@/lib/format'
 import { parsePrice } from '@/lib/validators'
 import { useData } from '@/hooks/useData'
-import type { Category, Product } from '@/types'
+import type { Branch, Category, Product } from '@/types'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Card, EmptyState, ErrorBox, PageHeader, PageLoader, Pill, useToast } from '@/components/ui/Feedback'
 import { Field, Input, Select, Textarea, Toggle } from '@/components/ui/Form'
@@ -24,17 +24,19 @@ interface Form {
   image_url: string | null
   is_available: boolean
   is_published: boolean
+  unavailable_branch_ids: string[]
 }
 
 export default function ProductsPage() {
   const { restaurant, canWrite, limits } = useRestaurant()
   const toast = useToast()
   const { data, loading, error, reload } = useData(async () => {
-    const [categories, products] = await Promise.all([
+    const [categories, products, branches] = await Promise.all([
       unwrap<Category[]>(supabase.from('categories').select('*').eq('restaurant_id', restaurant.id).order('sort_order')),
       unwrap<Product[]>(supabase.from('products').select('*').eq('restaurant_id', restaurant.id).order('sort_order').order('created_at')),
+      unwrap<Branch[]>(supabase.from('branches').select('*').eq('restaurant_id', restaurant.id).eq('is_active', true).order('name')),
     ])
-    return { categories, products }
+    return { categories, products, branches }
   }, [restaurant.id])
 
   const [q, setQ] = useState('')
@@ -53,6 +55,7 @@ export default function ProductsPage() {
   const total = data?.products.length ?? 0
   const max = limits.max_products
   const reached = max >= 0 && total >= max
+  const branches = data?.branches ?? []
 
   function triggerPulse(id: string) {
     setAnimId(id)
@@ -69,6 +72,7 @@ export default function ProductsPage() {
       image_url: null,
       is_available: true,
       is_published: true,
+      unavailable_branch_ids: [],
     })
   }
 
@@ -83,6 +87,21 @@ export default function ProductsPage() {
       image_url: p.image_url,
       is_available: p.is_available,
       is_published: p.is_published,
+      unavailable_branch_ids: p.unavailable_branch_ids ?? [],
+    })
+  }
+
+  function toggleBranchAvailability(branchId: string, checked: boolean) {
+    if (!form) return
+    setForm((prev) => {
+      if (!prev) return prev
+      const current = new Set(prev.unavailable_branch_ids)
+      if (checked) {
+        current.delete(branchId)
+      } else {
+        current.add(branchId)
+      }
+      return { ...prev, unavailable_branch_ids: Array.from(current) }
     })
   }
 
@@ -103,6 +122,7 @@ export default function ProductsPage() {
         image_url: form.image_url,
         is_available: form.is_available,
         is_published: form.is_published,
+        unavailable_branch_ids: form.unavailable_branch_ids,
       }
       if (form.id) {
         await unwrap(supabase.from('products').update(row).eq('id', form.id))
@@ -148,6 +168,7 @@ export default function ProductsPage() {
             image_url: p.image_url,
             is_available: p.is_available,
             is_published: false,
+            unavailable_branch_ids: p.unavailable_branch_ids ?? [],
           })
           .select()
           .single()
@@ -271,117 +292,125 @@ export default function ProductsPage() {
           )}
 
           <div className="grid gap-3 md:grid-cols-2">
-            {filtered.map((p) => (
-              <Card
-                key={p.id}
-                className={`anim-pop-in group flex gap-3.5 rounded-2xl border border-slate-200/80 !p-3.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md active:scale-[0.99] ${
-                  animId === p.id ? 'scale-[1.01] ring-2 ring-orange-400/70' : ''
-                } ${!p.is_published || !p.is_available ? 'bg-slate-50/70' : 'bg-white'}`}
-              >
-                <button
-                  type="button"
-                  disabled={!canWrite}
-                  onClick={() => openEdit(p)}
-                  className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-1 ring-slate-200/70 transition-all duration-150 group-hover:ring-orange-300 active:scale-95 disabled:cursor-default"
+            {filtered.map((p) => {
+              const unavailCount = p.unavailable_branch_ids?.length ?? 0
+              return (
+                <Card
+                  key={p.id}
+                  className={`anim-pop-in group flex gap-3.5 rounded-2xl border border-slate-200/80 !p-3.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md active:scale-[0.99] ${
+                    animId === p.id ? 'scale-[1.01] ring-2 ring-orange-400/70' : ''
+                  } ${!p.is_published || !p.is_available ? 'bg-slate-50/70' : 'bg-white'}`}
                 >
-                  {p.image_url ? (
-                    <img
-                      src={p.image_url}
-                      alt={p.name}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <Icon name="image" className="h-7 w-7" />
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    disabled={!canWrite}
+                    onClick={() => openEdit(p)}
+                    className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-1 ring-slate-200/70 transition-all duration-150 group-hover:ring-orange-300 active:scale-95 disabled:cursor-default"
+                  >
+                    {p.image_url ? (
+                      <img
+                        src={p.image_url}
+                        alt={p.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <Icon name="image" className="h-7 w-7" />
+                    )}
+                  </button>
 
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <button
-                        type="button"
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          disabled={!canWrite}
+                          onClick={() => openEdit(p)}
+                          className="block max-w-full truncate text-left font-semibold text-slate-900 transition-colors hover:text-orange-600 disabled:cursor-default"
+                        >
+                          {p.name}
+                        </button>
+                        <p className="text-xs font-medium text-slate-500">
+                          {catName.get(p.category_id)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-lg bg-orange-50 px-2 py-0.5 text-sm font-bold text-orange-700 transition-transform duration-150 group-hover:scale-105">
+                        {money(restaurant.currency, p.price)}
+                      </span>
+                    </div>
+
+                    {(!p.is_available || !p.is_published || unavailCount > 0) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {!p.is_available && <Pill tone="red">Agotado</Pill>}
+                        {!p.is_published && <Pill tone="amber">Oculto</Pill>}
+                        {unavailCount > 0 && (
+                          <Pill tone="amber">
+                            Agotado en {unavailCount} {unavailCount === 1 ? 'sucursal' : 'sucursales'}
+                          </Pill>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-auto flex flex-wrap items-center gap-1 pt-2.5">
+                      <Button
+                        size="sm"
+                        variant={p.is_available ? 'ghost' : 'secondary'}
+                        disabled={!canWrite}
+                        onClick={() =>
+                          patch(
+                            p,
+                            { is_available: !p.is_available },
+                            p.is_available ? 'Marcado como agotado' : 'Disponible nuevamente'
+                          )
+                        }
+                        className="h-8 rounded-lg px-2.5 text-xs"
+                      >
+                        {p.is_available ? 'Marcar agotado' : 'Disponible'}
+                      </Button>
+
+                      <IconButton
+                        label="Editar"
                         disabled={!canWrite}
                         onClick={() => openEdit(p)}
-                        className="block max-w-full truncate text-left font-semibold text-slate-900 transition-colors hover:text-orange-600 disabled:cursor-default"
                       >
-                        {p.name}
-                      </button>
-                      <p className="text-xs font-medium text-slate-500">
-                        {catName.get(p.category_id)}
-                      </p>
+                        <Icon name="edit" className="h-4 w-4" />
+                      </IconButton>
+
+                      <IconButton
+                        label="Duplicar"
+                        disabled={!canWrite || reached}
+                        onClick={() => duplicate(p)}
+                      >
+                        <Icon name="copy" className="h-4 w-4" />
+                      </IconButton>
+
+                      <IconButton
+                        label={p.is_published ? 'Ocultar temporalmente' : 'Publicar'}
+                        disabled={!canWrite}
+                        onClick={() =>
+                          patch(
+                            p,
+                            { is_published: !p.is_published },
+                            p.is_published ? 'Producto oculto' : 'Producto publicado'
+                          )
+                        }
+                      >
+                        <Icon name={p.is_published ? 'eye' : 'eyeoff'} className="h-4 w-4" />
+                      </IconButton>
+
+                      <IconButton
+                        label="Eliminar"
+                        disabled={!canWrite}
+                        onClick={() => setDel(p)}
+                        className="ml-auto text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        <Icon name="trash" className="h-4 w-4" />
+                      </IconButton>
                     </div>
-                    <span className="shrink-0 rounded-lg bg-orange-50 px-2 py-0.5 text-sm font-bold text-orange-700 transition-transform duration-150 group-hover:scale-105">
-                      {money(restaurant.currency, p.price)}
-                    </span>
                   </div>
-
-                  {(!p.is_available || !p.is_published) && (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {!p.is_available && <Pill tone="red">Agotado</Pill>}
-                      {!p.is_published && <Pill tone="amber">Oculto</Pill>}
-                    </div>
-                  )}
-
-                  <div className="mt-auto flex flex-wrap items-center gap-1 pt-2.5">
-                    <Button
-                      size="sm"
-                      variant={p.is_available ? 'ghost' : 'secondary'}
-                      disabled={!canWrite}
-                      onClick={() =>
-                        patch(
-                          p,
-                          { is_available: !p.is_available },
-                          p.is_available ? 'Marcado como agotado' : 'Disponible nuevamente'
-                        )
-                      }
-                      className="h-8 rounded-lg px-2.5 text-xs"
-                    >
-                      {p.is_available ? 'Marcar agotado' : 'Disponible'}
-                    </Button>
-
-                    <IconButton
-                      label="Editar"
-                      disabled={!canWrite}
-                      onClick={() => openEdit(p)}
-                    >
-                      <Icon name="edit" className="h-4 w-4" />
-                    </IconButton>
-
-                    <IconButton
-                      label="Duplicar"
-                      disabled={!canWrite || reached}
-                      onClick={() => duplicate(p)}
-                    >
-                      <Icon name="copy" className="h-4 w-4" />
-                    </IconButton>
-
-                    <IconButton
-                      label={p.is_published ? 'Ocultar temporalmente' : 'Publicar'}
-                      disabled={!canWrite}
-                      onClick={() =>
-                        patch(
-                          p,
-                          { is_published: !p.is_published },
-                          p.is_published ? 'Producto oculto' : 'Producto publicado'
-                        )
-                      }
-                    >
-                      <Icon name={p.is_published ? 'eye' : 'eyeoff'} className="h-4 w-4" />
-                    </IconButton>
-
-                    <IconButton
-                      label="Eliminar"
-                      disabled={!canWrite}
-                      onClick={() => setDel(p)}
-                      className="ml-auto text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                    >
-                      <Icon name="trash" className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
         </>
       )}
@@ -474,6 +503,37 @@ export default function ProductsPage() {
                 label="Publicado en el menú"
               />
             </div>
+
+            {branches.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Disponible en sucursales
+                </p>
+                <p className="text-xs text-slate-500">
+                  Desmarca una sucursal si este producto se agotó o no se vende ahí.
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {branches.map((b) => {
+                    const checked = !form.unavailable_branch_ids.includes(b.id)
+                    return (
+                      <label
+                        key={b.id}
+                        className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-orange-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => toggleBranchAvailability(b.id, e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="truncate font-medium">{b.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {err && (
               <p role="alert" className="anim-pop-in rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">
                 {err}

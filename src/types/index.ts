@@ -93,6 +93,7 @@ export interface Product {
   is_available: boolean
   is_published: boolean
   sort_order: number
+  unavailable_branch_ids?: string[]
 }
 
 export type BgMode = 'plantilla' | 'color' | 'degradado' | 'textura'

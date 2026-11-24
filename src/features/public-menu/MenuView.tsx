@@ -18,6 +18,12 @@ import { CartProvider, useCart } from './cart'
 
 interface Props { data: PublicMenuData; slug: string; preview?: boolean }
 
+function isProductAvailable(p: Product, branchId?: string | null): boolean {
+  if (!p.is_available) return false
+  if (branchId && p.unavailable_branch_ids?.includes(branchId)) return false
+  return true
+}
+
 /** Vista del menú público. Se reutiliza en la vista previa del panel (preview = true). */
 export default function MenuView({ data, slug, preview = false }: Props) {
   useEffect(() => { loadFont(data.theme.font) }, [data.theme.font])
@@ -33,7 +39,7 @@ export default function MenuView({ data, slug, preview = false }: Props) {
 
 function track(slug: string, args: { category?: string; product?: string; branch?: string }) {
   supabase.rpc('track_visit', { p_slug: slug, p_category: args.category ?? null, p_product: args.product ?? null, p_branch: args.branch ?? null })
-    .then(() => {}, () => {})
+    .then(() => { }, () => { })
 }
 
 function Inner({ data, slug, preview }: Props) {
@@ -86,7 +92,12 @@ function Inner({ data, slug, preview }: Props) {
           <h1 className={`mt-3 break-words font-bold leading-tight ${preview ? 'text-2xl' : 'text-2xl sm:text-3xl'}`}>{r.name}</h1>
           {r.description && <p className="mt-1 text-sm text-[var(--muted)]">{r.description}</p>}
           <div className="mt-3 space-y-1.5 text-sm text-[var(--muted)]">
-            {r.address && <p className="flex items-start gap-2"><Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />{r.address}</p>}
+            {(branch?.address || r.address) && (
+              <p className="flex items-start gap-2">
+                <Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
+                {branch?.address || r.address}
+              </p>
+            )}
             {r.hours.map((h, i) => (
               <p key={i}><span className="font-medium text-[var(--text)]">{h.label}:</span> {h.value}</p>
             ))}
@@ -112,7 +123,6 @@ function Inner({ data, slug, preview }: Props) {
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium ${b.id === branch?.id ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)]' : 'border-[var(--card-border)] bg-[var(--surface)] text-[var(--card-text)]'}`}>{b.name}</button>
                 ))}
               </div>
-              {branch?.address && <p className="mt-1 text-xs text-[var(--muted)]">{branch.address}</p>}
             </div>
           )}
         </div>
@@ -153,9 +163,20 @@ function Inner({ data, slug, preview }: Props) {
             <section key={c.id} className="mt-6">
               <h2 className="mb-3 text-lg font-bold">{prettyTitle(c.name)}</h2>
               <div className={grid}>
-                {items.map((p) => (
-                  <ProductCard key={p.id} p={p} theme={theme} cur={cur} onOpen={() => openProduct(p)} onAdd={() => !preview && cart.add(p)} />
-                ))}
+                {items.map((p) => {
+                  const available = isProductAvailable(p, branch?.id)
+                  return (
+                    <ProductCard
+                      key={p.id}
+                      p={p}
+                      available={available}
+                      theme={theme}
+                      cur={cur}
+                      onOpen={() => openProduct(p)}
+                      onAdd={() => !preview && available && cart.add(p)}
+                    />
+                  )
+                })}
               </div>
             </section>
           )
@@ -173,7 +194,20 @@ function Inner({ data, slug, preview }: Props) {
         </div>
       )}
 
-      {selected && <ProductSheet p={selected} cur={cur} onClose={() => setSelected(null)} onAdd={() => { cart.add(selected); setSelected(null) }} />}
+      {selected && (
+        <ProductSheet
+          p={selected}
+          available={isProductAvailable(selected, branch?.id)}
+          cur={cur}
+          onClose={() => setSelected(null)}
+          onAdd={() => {
+            if (isProductAvailable(selected, branch?.id)) {
+              cart.add(selected)
+              setSelected(null)
+            }
+          }}
+        />
+      )}
       {cartOpen && (
         <CartSheet
           restaurantId={r.id}
@@ -191,15 +225,29 @@ function Inner({ data, slug, preview }: Props) {
   )
 }
 
-function Thumb({ p, className }: { p: Product; className: string }) {
+function Thumb({ p, available, className }: { p: Product; available: boolean; className: string }) {
   return (
     <div className={`overflow-hidden bg-[var(--secondary)] ${className}`}>
-      <img src={p.image_url ?? ''} alt={prettyTitle(p.name)} loading="lazy" decoding="async" className={`h-full w-full object-cover ${p.is_available ? '' : 'grayscale'}`} />
+      <img src={p.image_url ?? ''} alt={prettyTitle(p.name)} loading="lazy" decoding="async" className={`h-full w-full object-cover ${available ? '' : 'grayscale'}`} />
     </div>
   )
 }
 
-function ProductCard({ p, theme, cur, onOpen, onAdd }: { p: Product; theme: Theme; cur: string; onOpen: () => void; onAdd: () => void }) {
+function ProductCard({
+  p,
+  available,
+  theme,
+  cur,
+  onOpen,
+  onAdd,
+}: {
+  p: Product
+  available: boolean
+  theme: Theme
+  cur: string
+  onOpen: () => void
+  onAdd: () => void
+}) {
   const plana = theme.card_style === 'plana'
   const card = plana
     ? 'rounded-none border-b border-[var(--border)] bg-transparent'
@@ -214,20 +262,20 @@ function ProductCard({ p, theme, cur, onOpen, onAdd }: { p: Product; theme: Them
   const desc = p.description ? prettySentence(p.description) : ''
   return (
     <article onClick={onOpen} className={`relative flex cursor-pointer overflow-hidden ${ink} ${card} ${row ? 'gap-3 p-3' : 'h-full flex-col'}`}>
-      {!row && hasImg && <Thumb p={p} className={`w-full ${theme.layout === 'grande' ? 'aspect-[16/10]' : 'aspect-[4/3]'} ${imgR}`} />}
+      {!row && hasImg && <Thumb p={p} available={available} className={`w-full ${theme.layout === 'grande' ? 'aspect-[16/10]' : 'aspect-[4/3]'} ${imgR}`} />}
       <div className={`flex min-w-0 flex-1 flex-col ${row ? '' : 'p-3'}`}>
-        {!p.is_available && <span className="mb-1 inline-block w-fit rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-white">Agotado</span>}
+        {!available && <span className="mb-1 inline-block w-fit rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-white">Agotado</span>}
         <h3 className="break-words text-sm font-semibold leading-snug">{prettyTitle(p.name)}</h3>
         {desc && <p className={`mt-1 line-clamp-3 text-xs leading-snug ${soft}`}>{desc}</p>}
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
           <span className="whitespace-nowrap text-sm font-bold text-[var(--primary)]">{money(cur, p.price)}</span>
-          <button onClick={(e) => { e.stopPropagation(); onAdd() }} disabled={!p.is_available} aria-label={`Agregar ${prettyTitle(p.name)}`}
+          <button onClick={(e) => { e.stopPropagation(); onAdd() }} disabled={!available} aria-label={`Agregar ${prettyTitle(p.name)}`}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--btn)] text-[var(--on-btn)] transition active:scale-95 disabled:opacity-30">
             <Icon name="plus" className="h-5 w-5" />
           </button>
         </div>
       </div>
-      {row && hasImg && <Thumb p={p} className={`h-20 w-20 shrink-0 rounded-xl ${imgR}`} />}
+      {row && hasImg && <Thumb p={p} available={available} className={`h-20 w-20 shrink-0 rounded-xl ${imgR}`} />}
     </article>
   )
 }
@@ -248,12 +296,24 @@ function Sheet({ onClose, title, children }: { onClose: () => void; title: strin
   )
 }
 
-function ProductSheet({ p, cur, onClose, onAdd }: { p: Product; cur: string; onClose: () => void; onAdd: () => void }) {
+function ProductSheet({
+  p,
+  available,
+  cur,
+  onClose,
+  onAdd,
+}: {
+  p: Product
+  available: boolean
+  cur: string
+  onClose: () => void
+  onAdd: () => void
+}) {
   return (
     <Sheet onClose={onClose} title={p.name}>
       {p.image_url ? (
         <div className="relative">
-          <Thumb p={p} className="aspect-[4/3] w-full" />
+          <Thumb p={p} available={available} className="aspect-[4/3] w-full" />
           <button onClick={onClose} aria-label="Cerrar" className="absolute right-3 top-3 rounded-full bg-black/60 p-1.5 text-white"><Icon name="close" className="h-5 w-5" /></button>
         </div>
       ) : (
@@ -265,9 +325,9 @@ function ProductSheet({ p, cur, onClose, onAdd }: { p: Product; cur: string; onC
         <h2 className="text-xl font-bold">{prettyTitle(p.name)}</h2>
         {p.description && <p className="text-sm text-[var(--card-muted)]">{prettySentence(p.description)}</p>}
         <p className="text-xl font-bold text-[var(--primary)]">{money(cur, p.price)}</p>
-        <button onClick={onAdd} disabled={!p.is_available}
+        <button onClick={onAdd} disabled={!available}
           className="mt-2 w-full rounded-xl bg-[var(--btn)] py-3 font-semibold text-[var(--on-btn)] disabled:opacity-40">
-          {p.is_available ? 'Agregar al pedido' : 'Agotado'}
+          {available ? 'Agregar al pedido' : 'Agotado'}
         </button>
       </div>
     </Sheet>
@@ -443,11 +503,10 @@ function CartSheet({
                       setLocError(null)
                     }
                   }}
-                  className={`rounded-lg py-2 text-xs font-semibold transition ${
-                    deliveryType === opt.id
+                  className={`rounded-lg py-2 text-xs font-semibold transition ${deliveryType === opt.id
                       ? 'bg-[var(--btn)] text-[var(--on-btn)] shadow-sm'
                       : 'text-[var(--card-muted)] hover:text-[var(--card-text)]'
-                  }`}
+                    }`}
                 >
                   {opt.label}
                 </button>
@@ -601,11 +660,10 @@ function CartSheet({
                     key={pm}
                     type="button"
                     onClick={() => setPaymentMethod(pm)}
-                    className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition ${
-                      paymentMethod === pm
+                    className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition ${paymentMethod === pm
                         ? 'border-[var(--btn)] bg-[var(--btn)] text-[var(--on-btn)]'
                         : 'border-[var(--card-border)] text-[var(--card-text)] hover:border-[var(--primary)]'
-                    }`}
+                      }`}
                   >
                     {PAYMENT_LABELS[pm]}
                   </button>

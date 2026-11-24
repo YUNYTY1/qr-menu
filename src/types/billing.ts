@@ -36,3 +36,4 @@ export interface PublicPlansResponse { trial_days: number; plans: PublicPlan[] }
 
 export const MONTH_OPTIONS = [1, 3, 6, 12] as const
 export const monthsLabel = (m: number) => (m === 1 ? '1 mes' : `${m} meses`)
+export const MENU_SETUP_FEE = 5
