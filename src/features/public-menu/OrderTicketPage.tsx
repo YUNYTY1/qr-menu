@@ -31,16 +31,49 @@ export default function OrderTicketPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!id) return
-    supabase
-      .from('orders')
-      .select('*, restaurants(name, currency, logo_url)')
-      .eq('id', id)
-      .single()
-      .then(({ data }) => {
-        setOrder((data as OrderRow) ?? null)
+    if (!id) {
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      setLoading(true)
+
+      const { data: orderData, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (cancelled) return
+
+      if (error || !orderData) {
+        console.error('Error cargando comanda:', error)
+        setOrder(null)
         setLoading(false)
+        return
+      }
+
+      const { data: restData } = await supabase
+        .from('restaurants')
+        .select('name, currency, logo_url')
+        .eq('id', orderData.restaurant_id)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      setOrder({
+        ...(orderData as OrderRow),
+        restaurants: restData ?? null,
       })
+      setLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   if (loading) {

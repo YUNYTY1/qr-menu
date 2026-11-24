@@ -72,7 +72,7 @@ export default function PlansPage() {
             <Field label="Máx. productos" hint="-1 = ilimitados"><Input type="number" min={-1} value={form.limits.max_products} onChange={(e) => setL('max_products', Number(e.target.value))} /></Field>
             <Field label="Máx. sucursales" hint="-1 = ilimitadas"><Input type="number" min={-1} value={form.limits.max_branches} onChange={(e) => setL('max_branches', Number(e.target.value))} /></Field>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
             <Toggle checked={form.limits.advanced_theme} onChange={(v) => setL('advanced_theme', v)} label="Personalización avanzada" />
             <Toggle checked={form.limits.promotions} onChange={(v) => setL('promotions', v)} label="Promociones" />
             <Toggle checked={form.limits.stats} onChange={(v) => setL('stats', v)} label="Estadísticas" />
