@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase, unwrap } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
 import { useData } from '@/hooks/useData'
@@ -42,7 +42,7 @@ function Editor({ data, canWrite, advanced, onSaved }: {
   data: { theme: Theme; categories: Category[]; products: Product[]; promotions: Promotion[]; branches: Branch[] }
   canWrite: boolean; advanced: boolean; onSaved: () => void
 }) {
-  const { restaurant } = useRestaurant()
+  const { restaurant, setHasUnsavedChanges } = useRestaurant()
   const toast = useToast()
   const [theme, setTheme] = useState<Theme>(data.theme)
   const [logo, setLogo] = useState(restaurant.logo_url)
@@ -50,6 +50,37 @@ function Editor({ data, canWrite, advanced, onSaved }: {
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof Theme>(k: K, v: Theme[K]) => setTheme((t) => ({ ...t, [k]: v }))
   const lock = !canWrite || !advanced
+
+  const isDirty = useMemo(() => {
+    return (
+      JSON.stringify(theme) !== JSON.stringify(data.theme) ||
+      (logo ?? '') !== (restaurant.logo_url ?? '') ||
+      (cover ?? '') !== (restaurant.cover_url ?? '')
+    )
+  }, [theme, data.theme, logo, cover, restaurant.logo_url, restaurant.cover_url])
+
+  useEffect(() => {
+    setHasUnsavedChanges?.(isDirty)
+    return () => setHasUnsavedChanges?.(false)
+  }, [isDirty, setHasUnsavedChanges])
+
+  useEffect(() => {
+    if (!isDirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [isDirty])
+
+  function discardChanges() {
+    setTheme(data.theme)
+    setLogo(restaurant.logo_url)
+    setCover(restaurant.cover_url)
+    setHasUnsavedChanges?.(false)
+    toast('Cambios descartados')
+  }
 
   const t = todayLima()
   const preview: PublicMenuData = useMemo(() => ({
@@ -69,6 +100,7 @@ function Editor({ data, canWrite, advanced, onSaved }: {
       await unwrap(supabase.from('restaurants').update({ logo_url: logo, cover_url: cover }).eq('id', restaurant.id))
       const { restaurant_id: _r, ...fields } = theme
       await unwrap(supabase.from('restaurant_themes').update(fields).eq('restaurant_id', restaurant.id))
+      setHasUnsavedChanges?.(false)
       onSaved()
     } catch (e) { toast(errMsg(e), 'error') } finally { setBusy(false) }
   }
@@ -77,9 +109,24 @@ function Editor({ data, canWrite, advanced, onSaved }: {
     `overflow-hidden rounded-xl border text-center text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-200 hover:border-slate-300'}`
 
   return (
-    <div>
-      <PageHeader title="Apariencia" subtitle="Personaliza tu menú. La vista previa se actualiza al instante; nada se publica hasta que guardes."
-        actions={<Button loading={busy} disabled={!canWrite} onClick={save}>Guardar cambios</Button>} />
+    <div className={isDirty ? 'pb-20' : ''}>
+      <PageHeader
+        title="Apariencia"
+        subtitle={isDirty
+          ? 'Tienes cambios sin guardar. Recuerda guardar para publicarlos.'
+          : 'Personaliza tu menú. La vista previa se actualiza al instante; nada se publica hasta que guardes.'}
+        actions={
+          <div className="flex items-center gap-2">
+            {isDirty && (
+              <span className="hidden rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 sm:inline-block">
+                Sin guardar
+              </span>
+            )}
+            <Button loading={busy} disabled={!canWrite} onClick={save}>Guardar cambios</Button>
+          </div>
+        }
+      />
+
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-5">
           <Card className="space-y-4">
@@ -171,6 +218,28 @@ function Editor({ data, canWrite, advanced, onSaved }: {
           </div>
         </div>
       </div>
+
+      {isDirty && canWrite && (
+        <div className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-3xl px-4 md:bottom-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur">
+            <div className="text-xs sm:text-sm">
+              <span className="font-semibold text-amber-900">Cambios sin guardar</span>
+              <span className="ml-1.5 text-slate-600">Guarda para aplicarlos en tu menú.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={discardChanges}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Descartar
+              </button>
+              <Button loading={busy} onClick={save}>Guardar cambios</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,11 @@
 import { createContext, useContext } from 'react'
 import type { Plan, PlanLimits, Restaurant, SubStatus, Subscription } from '@/types'
 
+export type PendingNavigationAction =
+  | { type: 'route'; to: string }
+  | { type: 'signOut' }
+  | null
+
 export interface RestaurantCtx {
   restaurant: Restaurant
   subscription: Subscription | null
@@ -10,6 +15,9 @@ export interface RestaurantCtx {
   canWrite: boolean
   isSuperadmin: boolean
   reload: () => void
+  hasUnsavedChanges?: boolean
+  setHasUnsavedChanges?: (dirty: boolean) => void
+  requestNavigation?: (action: NonNullable<PendingNavigationAction>) => boolean
 }
 
 export const FULL_LIMITS: PlanLimits = {

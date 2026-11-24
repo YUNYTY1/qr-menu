@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthContext'
 import Icon, { type IconName } from './Icon'
@@ -10,15 +10,19 @@ export interface NavItem {
   end?: boolean
 }
 
+export type NavigationIntent = { type: 'route'; to: string } | { type: 'signOut' }
+
 export default function AdminShell({
   title,
   nav,
   top,
+  onInterceptNavigation,
   children,
 }: {
   title: string
   nav: NavItem[]
   top?: ReactNode
+  onInterceptNavigation?: (intent: NavigationIntent) => boolean
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -34,6 +38,25 @@ export default function AdminShell({
       active.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
     }
   }, [pathname])
+
+  function handleNavClick(e: MouseEvent<HTMLAnchorElement>, to: string, closeDrawer = false) {
+    if (to !== pathname && onInterceptNavigation) {
+      const allowed = onInterceptNavigation({ type: 'route', to })
+      if (!allowed) {
+        e.preventDefault()
+        return
+      }
+    }
+    if (closeDrawer) setOpen(false)
+  }
+
+  function handleSignOut() {
+    if (onInterceptNavigation) {
+      const allowed = onInterceptNavigation({ type: 'signOut' })
+      if (!allowed) return
+    }
+    signOut()
+  }
 
   return (
     <div className="min-h-screen bg-[#faf9f7] text-slate-900 lg:flex">
@@ -77,7 +100,7 @@ export default function AdminShell({
               key={n.to}
               to={n.to}
               end={n.end}
-              onClick={() => setOpen(false)}
+              onClick={(e) => handleNavClick(e, n.to, true)}
               className={({ isActive }) =>
                 `group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all ${
                   isActive
@@ -99,7 +122,7 @@ export default function AdminShell({
             </p>
             <button
               type="button"
-              onClick={signOut}
+              onClick={handleSignOut}
               className="mt-2 flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-xs font-semibold text-slate-400 transition hover:bg-white/5 hover:text-rose-300"
             >
               <Icon name="logout" className="h-4 w-4" /> Cerrar sesión
@@ -147,6 +170,7 @@ export default function AdminShell({
                   key={n.to}
                   to={n.to}
                   end={n.end}
+                  onClick={(e) => handleNavClick(e, n.to)}
                   className={({ isActive }) =>
                     `flex min-w-[74px] shrink-0 snap-start flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1.5 text-[10px] font-semibold leading-tight tracking-tight transition-all active:scale-95 ${
                       isActive

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { supabase, unwrap } from '@/lib/supabase'
 import { useData } from '@/hooks/useData'
@@ -6,19 +6,49 @@ import { effStatus, one, STATUS_LABEL } from '@/lib/status'
 import { publicUrl } from '@/lib/tenant'
 import { fmtDate } from '@/lib/format'
 import type { Plan, Restaurant, Subscription } from '@/types'
-import AdminShell, { type NavItem } from '@/components/ui/AdminShell'
+import AdminShell, { type NavItem, type NavigationIntent } from '@/components/ui/AdminShell'
 import { Badge, ErrorBox, PageLoader } from '@/components/ui/Feedback'
 import { Select } from '@/components/ui/Form'
 import { useAuth } from '@/features/auth/AuthContext'
-import { FULL_LIMITS, RestaurantContext, STARTER_LIMITS, type RestaurantCtx } from './RestaurantContext'
+import {
+  FULL_LIMITS,
+  RestaurantContext,
+  STARTER_LIMITS,
+  type PendingNavigationAction,
+  type RestaurantCtx,
+} from './RestaurantContext'
 import PlanBanner from './PlanBanner'
 
 export default function PanelLayout() {
   const { rid = '' } = useParams()
   const navigate = useNavigate()
-  const { profile, memberships } = useAuth()
+  const { profile, memberships, signOut } = useAuth()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingNavigationAction>(null)
   const isSuper = !!profile?.is_superadmin
   const allowed = isSuper || memberships.some((m) => m.restaurant_id === rid)
+
+  const handleInterceptNavigation = useCallback(
+    (intent: NonNullable<PendingNavigationAction>) => {
+      if (!hasUnsavedChanges) return true
+      setPendingAction(intent)
+      return false
+    },
+    [hasUnsavedChanges]
+  )
+
+  function confirmLeave() {
+    const action = pendingAction
+    setPendingAction(null)
+    setHasUnsavedChanges(false)
+    if (!action) return
+    if (action.type === 'route') navigate(action.to)
+    else if (action.type === 'signOut') signOut()
+  }
+
+  function cancelLeave() {
+    setPendingAction(null)
+  }
 
   const { data, loading, error, reload } = useData(async () => {
     if (!allowed) throw new Error('No tienes acceso a este restaurante.')
@@ -41,8 +71,11 @@ export default function PanelLayout() {
       canWrite: isSuper || status === 'activo' || status === 'pendiente',
       isSuperadmin: isSuper,
       reload,
+      hasUnsavedChanges,
+      setHasUnsavedChanges,
+      requestNavigation: handleInterceptNavigation,
     }
-  }, [data, isSuper, reload])
+  }, [data, isSuper, reload, hasUnsavedChanges, handleInterceptNavigation])
 
   const base = `/panel/${rid}`
   const nav: NavItem[] = [
@@ -61,6 +94,11 @@ export default function PanelLayout() {
       {isSuper && (
         <Link
           to={`/superadmin/restaurants/${rid}`}
+          onClick={(e) => {
+            if (!handleInterceptNavigation({ type: 'route', to: `/superadmin/restaurants/${rid}` })) {
+              e.preventDefault()
+            }
+          }}
           className="inline-flex items-center gap-1 text-xs font-medium text-orange-300 transition hover:text-orange-200"
         >
           ← Volver a Grupo Underty
@@ -69,7 +107,11 @@ export default function PanelLayout() {
       {!isSuper && memberships.length > 1 ? (
         <Select
           value={rid}
-          onChange={(e) => navigate(`/panel/${e.target.value}`)}
+          onChange={(e) => {
+            const target = `/panel/${e.target.value}`
+            if (!handleInterceptNavigation({ type: 'route', to: target })) return
+            navigate(target)
+          }}
           className="!rounded-xl !border-slate-700 !bg-slate-900 !text-white"
         >
           {memberships.map((m) => (
@@ -100,7 +142,12 @@ export default function PanelLayout() {
   )
 
   return (
-    <AdminShell title="Editor de carta" nav={nav} top={top}>
+    <AdminShell
+      title="Editor de carta"
+      nav={nav}
+      top={top}
+      onInterceptNavigation={(intent: NavigationIntent) => handleInterceptNavigation(intent)}
+    >
       {loading && <PageLoader />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {ctx && (
@@ -118,6 +165,58 @@ export default function PanelLayout() {
           <PlanBanner />
           <Outlet />
         </RestaurantContext.Provider>
+      )}
+
+      {pendingAction && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="unsaved-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[2px]"
+          onClick={cancelLeave}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 id="unsaved-modal-title" className="text-base font-bold text-slate-900">
+                  Tienes cambios sin guardar
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                  Si sales de <strong>Apariencia</strong> ahora, perderás los cambios que hiciste en tu menú y no se publicarán.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={cancelLeave}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Quedarme y guardar
+              </button>
+              <button
+                type="button"
+                onClick={confirmLeave}
+                className="rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700"
+              >
+                Salir sin guardar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AdminShell>
   )
