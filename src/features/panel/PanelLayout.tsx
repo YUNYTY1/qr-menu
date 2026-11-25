@@ -148,8 +148,8 @@ export default function PanelLayout() {
       top={top}
       onInterceptNavigation={(intent: NavigationIntent) => handleInterceptNavigation(intent)}
     >
-      {loading && <PageLoader />}
-      {error && <ErrorBox message={error} onRetry={reload} />}
+      {loading && !ctx && <PageLoader />}
+      {error && !ctx && <ErrorBox message={error} onRetry={reload} />}
       {ctx && (
         <RestaurantContext.Provider value={ctx}>
           {!ctx.canWrite && !ctx.isSuperadmin && (

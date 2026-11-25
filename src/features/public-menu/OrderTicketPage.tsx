@@ -8,7 +8,7 @@ import { cleanPhone, googleMapsUrl, PAYMENT_LABELS, type DeliveryType, type Paym
 interface OrderRow {
   id: string
   order_number: number
-  restaurant_id: string
+  restaurant_id?: string
   customer_name: string
   customer_phone: string | null
   delivery_type: DeliveryType
@@ -22,6 +22,7 @@ interface OrderRow {
   items: Array<{ id: string; name: string; price: number; qty: number; image_url?: string | null }>
   total: number
   created_at: string
+  restaurant?: { name: string; currency: string | null; logo_url: string | null } | null
   restaurants?: { name: string; currency: string | null; logo_url: string | null } | null
 }
 
@@ -41,32 +42,21 @@ export default function OrderTicketPage() {
     ;(async () => {
       setLoading(true)
 
-      const { data: orderData, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const { data, error } = await supabase.rpc('get_order_ticket', { p_id: id })
 
       if (cancelled) return
 
-      if (error || !orderData) {
-        console.error('Error cargando comanda:', error)
+      if (error || !data) {
+        if (error) console.error('Error cargando comanda:', error)
         setOrder(null)
         setLoading(false)
         return
       }
 
-      const { data: restData } = await supabase
-        .from('restaurants')
-        .select('name, currency, logo_url')
-        .eq('id', orderData.restaurant_id)
-        .maybeSingle()
-
-      if (cancelled) return
-
+      const row = data as OrderRow
       setOrder({
-        ...(orderData as OrderRow),
-        restaurants: restData ?? null,
+        ...row,
+        restaurant: row.restaurant ?? row.restaurants ?? null,
       })
       setLoading(false)
     })()
@@ -84,7 +74,8 @@ export default function OrderTicketPage() {
     return <div className="flex min-h-screen items-center justify-center bg-[#f3e8dc] p-4 text-center text-sm text-stone-700">No se encontró este pedido.</div>
   }
 
-  const cur = order.restaurants?.currency || 'S/'
+  const restInfo = order.restaurant ?? order.restaurants ?? null
+  const cur = restInfo?.currency || 'S/'
   const mapsLink = order.delivery_type === 'delivery' ? googleMapsUrl(order.latitude, order.longitude) : null
   const rawPhone = order.customer_phone?.trim() || ''
   const telDigits = rawPhone.replace(/\D/g, '')
@@ -106,7 +97,7 @@ export default function OrderTicketPage() {
             </span>
             <span className="text-xs text-stone-300">{dateStr}</span>
           </div>
-          <h1 className="mt-2 text-xl font-bold">{order.restaurants?.name || 'Comanda digital'}</h1>
+          <h1 className="mt-2 text-xl font-bold">{restInfo?.name || 'Comanda digital'}</h1>
         </div>
 
         <div className="space-y-4 p-6">

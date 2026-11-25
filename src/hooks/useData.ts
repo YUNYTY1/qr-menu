@@ -8,13 +8,26 @@ export function useData<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [tick, setTick] = useState(0)
   const fnRef = useRef(fn)
   fnRef.current = fn
+  const hasDataRef = useRef(false)
 
   useEffect(() => {
     let alive = true
-    setLoading(true); setError(null)
+    if (!hasDataRef.current) {
+      setLoading(true)
+    }
+    setError(null)
     fnRef.current()
-      .then((d) => { if (alive) { setData(d); setLoading(false) } })
-      .catch((e) => { if (alive) { setError(errMsg(e)); setLoading(false) } })
+      .then((d) => {
+        if (!alive) return
+        hasDataRef.current = true
+        setData(d)
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setError(errMsg(e))
+        setLoading(false)
+      })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick])

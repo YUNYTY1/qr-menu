@@ -32,10 +32,22 @@ export default function ThemePage() {
     return { theme: { ...DEFAULT_THEME, ...(theme ?? {}) } as Theme, categories, products, promotions, branches }
   }, [restaurant.id])
 
-  if (loading) return <PageLoader />
-  if (error || !data) return <ErrorBox message={error ?? 'Error'} onRetry={reload} />
-  return <Editor key={restaurant.id} data={data} canWrite={canWrite} advanced={limits.advanced_theme}
-    onSaved={() => { reload(); reloadCtx(); toast('Apariencia guardada') }} />
+  if (loading && !data) return <PageLoader />
+  if (error && !data) return <ErrorBox message={error ?? 'Error'} onRetry={reload} />
+  if (!data) return null
+  return (
+    <Editor
+      key={restaurant.id}
+      data={data}
+      canWrite={canWrite}
+      advanced={limits.advanced_theme}
+      onSaved={() => {
+        reload()
+        reloadCtx()
+        toast('Apariencia guardada')
+      }}
+    />
+  )
 }
 
 function Editor({ data, canWrite, advanced, onSaved }: {
@@ -44,20 +56,26 @@ function Editor({ data, canWrite, advanced, onSaved }: {
 }) {
   const { restaurant, setHasUnsavedChanges } = useRestaurant()
   const toast = useToast()
+
+  const [savedTheme, setSavedTheme] = useState<Theme>(data.theme)
+  const [savedLogo, setSavedLogo] = useState(restaurant.logo_url)
+  const [savedCover, setSavedCover] = useState(restaurant.cover_url)
+
   const [theme, setTheme] = useState<Theme>(data.theme)
   const [logo, setLogo] = useState(restaurant.logo_url)
   const [cover, setCover] = useState(restaurant.cover_url)
   const [busy, setBusy] = useState(false)
+
   const set = <K extends keyof Theme>(k: K, v: Theme[K]) => setTheme((t) => ({ ...t, [k]: v }))
   const lock = !canWrite || !advanced
 
   const isDirty = useMemo(() => {
     return (
-      JSON.stringify(theme) !== JSON.stringify(data.theme) ||
-      (logo ?? '') !== (restaurant.logo_url ?? '') ||
-      (cover ?? '') !== (restaurant.cover_url ?? '')
+      JSON.stringify(theme) !== JSON.stringify(savedTheme) ||
+      (logo ?? '') !== (savedLogo ?? '') ||
+      (cover ?? '') !== (savedCover ?? '')
     )
-  }, [theme, data.theme, logo, cover, restaurant.logo_url, restaurant.cover_url])
+  }, [theme, savedTheme, logo, savedLogo, cover, savedCover])
 
   useEffect(() => {
     setHasUnsavedChanges?.(isDirty)
@@ -75,9 +93,9 @@ function Editor({ data, canWrite, advanced, onSaved }: {
   }, [isDirty])
 
   function discardChanges() {
-    setTheme(data.theme)
-    setLogo(restaurant.logo_url)
-    setCover(restaurant.cover_url)
+    setTheme(savedTheme)
+    setLogo(savedLogo)
+    setCover(savedCover)
     setHasUnsavedChanges?.(false)
     toast('Cambios descartados')
   }
@@ -100,6 +118,9 @@ function Editor({ data, canWrite, advanced, onSaved }: {
       await unwrap(supabase.from('restaurants').update({ logo_url: logo, cover_url: cover }).eq('id', restaurant.id))
       const { restaurant_id: _r, ...fields } = theme
       await unwrap(supabase.from('restaurant_themes').update(fields).eq('restaurant_id', restaurant.id))
+      setSavedTheme(theme)
+      setSavedLogo(logo)
+      setSavedCover(cover)
       setHasUnsavedChanges?.(false)
       onSaved()
     } catch (e) { toast(errMsg(e), 'error') } finally { setBusy(false) }
@@ -109,21 +130,18 @@ function Editor({ data, canWrite, advanced, onSaved }: {
     `overflow-hidden rounded-xl border text-center text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${active ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-200 hover:border-slate-300'}`
 
   return (
-    <div className={isDirty ? 'pb-20' : ''}>
+    <div>
       <PageHeader
         title="Apariencia"
         subtitle={isDirty
-          ? 'Tienes cambios sin guardar. Recuerda guardar para publicarlos.'
+          ? 'Tienes cambios sin guardar. Baja hasta Fondo del menú para guardarlos.'
           : 'Personaliza tu menú. La vista previa se actualiza al instante; nada se publica hasta que guardes.'}
         actions={
-          <div className="flex items-center gap-2">
-            {isDirty && (
-              <span className="hidden rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 sm:inline-block">
-                Sin guardar
-              </span>
-            )}
-            <Button loading={busy} disabled={!canWrite} onClick={save}>Guardar cambios</Button>
-          </div>
+          isDirty ? (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+              Sin guardar
+            </span>
+          ) : undefined
         }
       />
 
@@ -205,6 +223,29 @@ function Editor({ data, canWrite, advanced, onSaved }: {
                 </>
               )}
               <p className="text-xs text-slate-500">El texto cambia solo a claro u oscuro para que siempre se lea bien sobre tu fondo.</p>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                <div className="text-xs text-slate-500">
+                  {isDirty ? (
+                    <span className="font-medium text-amber-800">Tienes cambios pendientes por guardar.</span>
+                  ) : (
+                    <span>Todos los cambios están sincronizados.</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isDirty && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={discardChanges}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Descartar
+                    </button>
+                  )}
+                  <Button loading={busy} disabled={!canWrite} onClick={save}>Guardar cambios</Button>
+                </div>
+              </div>
             </div>
           </Card>
         </div>
@@ -218,28 +259,6 @@ function Editor({ data, canWrite, advanced, onSaved }: {
           </div>
         </div>
       </div>
-
-      {isDirty && canWrite && (
-        <div className="fixed inset-x-0 bottom-16 z-30 mx-auto max-w-3xl px-4 md:bottom-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur">
-            <div className="text-xs sm:text-sm">
-              <span className="font-semibold text-amber-900">Cambios sin guardar</span>
-              <span className="ml-1.5 text-slate-600">Guarda para aplicarlos en tu menú.</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={discardChanges}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Descartar
-              </button>
-              <Button loading={busy} onClick={save}>Guardar cambios</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
