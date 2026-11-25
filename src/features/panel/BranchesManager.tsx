@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase, unwrap } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
 import { isPhone } from '@/lib/validators'
+import { parseMapLocation } from '@/lib/maps'
 import { useData } from '@/hooks/useData'
 import type { Branch } from '@/types'
 import { Button, IconButton } from '@/components/ui/Button'
@@ -11,7 +12,7 @@ import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import Icon from '@/components/ui/Icon'
 import { useRestaurant } from './RestaurantContext'
 
-const blank = { name: '', address: '', phone: '', whatsapp: '', is_active: true }
+const blank = { name: '', address: '', map_location: '', phone: '', whatsapp: '', is_active: true }
 
 export default function BranchesManager() {
   const { restaurant, canWrite, limits, isSuperadmin } = useRestaurant()
@@ -36,11 +37,15 @@ export default function BranchesManager() {
     if (!edit.id && reached) return setErr('Has alcanzado el límite de sucursales de tu plan.')
     if (edit.name.trim().length < 2) return setErr('Ingresa el nombre de la sucursal.')
     if (edit.whatsapp && !isPhone(edit.whatsapp)) return setErr('WhatsApp inválido.')
+    if (edit.map_location.trim() && !parseMapLocation(edit.map_location)) {
+      return setErr('La ubicación debe ser un enlace de Google Maps o coordenadas (ej.: -12.0464, -77.0428).')
+    }
     setBusy(true)
     try {
       const row = {
         name: edit.name.trim(),
         address: edit.address.trim() || null,
+        map_location: edit.map_location.trim() || null,
         phone: edit.phone.trim() || null,
         whatsapp: edit.whatsapp.trim() || null,
         is_active: edit.is_active,
@@ -104,7 +109,7 @@ export default function BranchesManager() {
               disabled={!canWrite}
               onClick={() => {
                 setErr(null)
-                setEdit({ name: b.name, address: b.address ?? '', phone: b.phone ?? '', whatsapp: b.whatsapp ?? '', is_active: b.is_active, id: b.id })
+                setEdit({ name: b.name, address: b.address ?? '', map_location: b.map_location ?? '', phone: b.phone ?? '', whatsapp: b.whatsapp ?? '', is_active: b.is_active, id: b.id })
               }}
             >
               <Icon name="edit" />
@@ -134,6 +139,9 @@ export default function BranchesManager() {
             </Field>
             <Field label="Dirección">
               <Input value={edit.address} onChange={(e) => setEdit({ ...edit, address: e.target.value })} />
+            </Field>
+            <Field label="Ubicación en el mapa (opcional)" hint="Enlace de Google Maps o coordenadas, ej.: -12.0464, -77.0428. Si lo dejas vacío, se busca por la dirección.">
+              <Input value={edit.map_location} onChange={(e) => setEdit({ ...edit, map_location: e.target.value })} maxLength={300} placeholder="https://maps.app.goo.gl/… o -12.0464, -77.0428" />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Teléfono">

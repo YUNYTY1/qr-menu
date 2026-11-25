@@ -6,6 +6,7 @@ import { prettyTitle } from '@/lib/text'
 import { whatsappUrl } from '@/lib/wa'
 import { supabase } from '@/lib/supabase'
 import { isOpenNow } from '@/lib/schedule'
+import { mapsUrlFor } from '@/lib/maps'
 import Icon from '@/components/ui/Icon'
 import { CartProvider, useCart } from './cart'
 import { CartSheet } from './CartSheet'
@@ -21,8 +22,11 @@ export default function MenuView({ data, slug, preview = false }: Props) {
   const vars = useMemo(() => themeVars(data.theme), [data.theme])
   return (
     <CartProvider storageKey={preview ? undefined : `underty-cart-${slug}`}>
-      <div style={vars} className="min-h-full text-[var(--text)]">
-        <Inner data={data} slug={slug} preview={preview} />
+      {/* En escritorio el menú se muestra como una tarjeta centrada sobre un fondo neutro; en celular ocupa todo el ancho */}
+      <div className={preview ? 'min-h-full' : 'min-h-full sm:min-h-screen sm:bg-stone-200 sm:px-4 sm:py-6'}>
+        <div style={vars} className={`min-h-full text-[var(--text)] ${preview ? '' : 'mx-auto sm:min-h-0 sm:max-w-3xl sm:overflow-clip sm:rounded-[2rem] sm:shadow-2xl'}`}>
+          <Inner data={data} slug={slug} preview={preview} />
+        </div>
       </div>
     </CartProvider>
   )
@@ -41,6 +45,7 @@ function Inner({ data, slug, preview }: Props) {
   const [cartOpen, setCartOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [closedToast, setClosedToast] = useState(false)
   const [query, setQuery] = useState('')
   const [branchId, setBranchId] = useState<string | null>(branches[0]?.id ?? null)
   const favKey = `underty-fav-${slug}`
@@ -75,11 +80,22 @@ function Inner({ data, slug, preview }: Props) {
   }, [])
   const openNow = isOpenNow(r.schedule, r.timezone, now)
   const subtitle = [r.cuisine, r.city].filter(Boolean).join(' · ')
+  // Solo se bloquea cuando hay horario configurado y está cerrado (null = sin horario → no bloquea)
+  const closed = openNow === false
+  function notifyClosed() { setClosedToast(true) }
+  useEffect(() => {
+    if (!closedToast) return
+    const t = setTimeout(() => setClosedToast(false), 3500)
+    return () => clearTimeout(t)
+  }, [closedToast])
 
   const cats = categories.filter((c) => products.some((p) => p.category_id === c.id))
   const branch: Branch | undefined = branches.find((b) => b.id === branchId) ?? branches[0]
   const contact = branch?.whatsapp || r.whatsapp
   const address = branch?.address || r.address
+  // Ubicación exacta de la sucursal elegida; si la sucursal tiene dirección propia pero no pin, se busca por su dirección
+  const mapLocation = branch?.map_location || (branch?.address ? null : r.map_location)
+  const mapsHref = mapsUrlFor(mapLocation, address, r.city)
 
   const q = norm(query.trim())
   const sections: { key: string; title: string; items: Product[] }[] = q
@@ -123,53 +139,67 @@ function Inner({ data, slug, preview }: Props) {
     <div className="relative pb-6">
       {/* Portada */}
       <header>
-        <div className={`mx-auto max-w-4xl ${preview ? '' : 'sm:px-4 sm:pt-4'}`}>
-          <div className={`relative overflow-hidden bg-[var(--primary)] ${rs('h-44', 'sm:h-64 sm:rounded-3xl')}`}>
+        <div className="mx-auto max-w-4xl">
+          <div className={`relative overflow-hidden bg-[var(--primary)] ${rs('h-44', 'sm:h-60')}`}>
             {r.cover_url && <img src={r.cover_url} alt="" className="h-full w-full object-cover" />}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/30" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/30" />
             <div className="absolute right-3 top-3 flex gap-2">
               <button type="button" onClick={toggleSearch} aria-label="Buscar en la carta" aria-pressed={searchOpen} className={roundBtn}>
                 <Ico n="search" />
               </button>
-              <button type="button" onClick={() => !preview && setCartOpen(true)} aria-label="Ver pedido" className={roundBtn}>
+              <button type="button" onClick={() => { if (preview) return; if (closed) notifyClosed(); else setCartOpen(true) }} aria-label="Ver pedido" className={roundBtn}>
                 <Icon name="cart" />
                 {!preview && cart.count > 0 && (
                   <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--btn)] px-1 text-[10px] font-bold text-[var(--on-btn)]">{cart.count}</span>
                 )}
               </button>
             </div>
-            {r.description && (
-              <p className={`absolute left-4 right-4 line-clamp-2 text-sm font-medium text-white drop-shadow ${rs('bottom-12', 'sm:bottom-14')}`}>{r.description}</p>
-            )}
           </div>
         </div>
 
         {/* Tarjeta del local */}
         <div className={`relative mx-auto max-w-4xl px-4 ${rs('-mt-8', 'sm:-mt-12')}`}>
-          <div className="flex gap-4 rounded-3xl bg-[var(--surface)] p-4 text-[var(--card-text)] shadow-xl">
-            <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--secondary)] text-3xl font-bold text-[var(--primary)] ${rs('h-20 w-20', 'sm:h-24 sm:w-24')}`}
-              style={{ boxShadow: '0 12px 24px -12px var(--primary)' }}>
-              {r.logo_url ? <img src={r.logo_url} alt={`Logo de ${r.name}`} className="h-full w-full object-cover" /> : r.name.charAt(0)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <h1 className={`break-words font-extrabold leading-tight ${rs('text-xl', 'sm:text-2xl')}`}>{r.name}</h1>
-                {openNow !== null && (
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${openNow ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${openNow ? 'bg-emerald-600' : 'bg-red-600'}`} />{openNow ? 'Abierto' : 'Cerrado'}
-                  </span>
-                )}
+          <div className="rounded-3xl bg-[var(--surface)] p-4 text-[var(--card-text)] shadow-xl">
+            {/* Cabecera: logo + nombre + estado */}
+            <div className="flex items-center gap-3.5">
+              <div className={`flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--secondary)] text-3xl font-bold text-[var(--primary)] ${rs('h-16 w-16', 'sm:h-24 sm:w-24')}`}
+                style={{ boxShadow: '0 12px 24px -12px var(--primary)' }}>
+                {r.logo_url ? <img src={r.logo_url} alt={`Logo de ${r.name}`} className="h-full w-full object-cover" /> : r.name.charAt(0)}
               </div>
-              {subtitle && <p className="mt-0.5 text-sm text-[var(--card-muted)]">{subtitle}</p>}
-              <div className="mt-1.5 space-y-1 text-sm text-[var(--card-muted)]">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <h1 className={`min-w-0 break-words font-extrabold leading-tight ${rs('text-xl', 'sm:text-2xl')}`}>{r.name}</h1>
+                  {openNow !== null && (
+                    <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${openNow ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${openNow ? 'bg-emerald-600' : 'bg-red-600'}`} />{openNow ? 'Abierto' : 'Cerrado'}
+                    </span>
+                  )}
+                </div>
+                {subtitle && <p className="mt-0.5 text-sm text-[var(--card-muted)]">{subtitle}</p>}
+              </div>
+            </div>
+
+            {/* Dirección y horario a todo el ancho de la card */}
+            {(address || r.hours.length > 0) && (
+              <div className="mt-3.5 space-y-1.5 text-sm text-[var(--card-muted)]">
                 {address && (
-                  <p className="flex items-start gap-2"><Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />{address}</p>
+                  <a href={preview ? undefined : mapsHref} target="_blank" rel="noreferrer" aria-label="Ver ubicación en el mapa"
+                    className="flex items-start gap-2 transition hover:text-[var(--primary)] active:opacity-70">
+                    <Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
+                    <span className="min-w-0">
+                      {address}
+                      <Icon name="external" className="ml-1 inline h-3.5 w-3.5 align-[-2px] opacity-60" />
+                    </span>
+                  </a>
                 )}
                 {r.hours.map((h, i) => (
                   <p key={i} className="flex items-start gap-2"><Ico n="clock" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" /><span><span className="font-semibold text-[var(--card-text)]">{h.label}:</span> {h.value}</span></p>
                 ))}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+            )}
+
+            {SOCIALS.some((s) => r.socials?.[s.k]) && (
+              <div className="mt-3.5 flex flex-wrap gap-2">
                 {SOCIALS.map((s) => r.socials?.[s.k] && (
                   <a key={s.k} href={preview ? undefined : socialUrl(r.socials[s.k]!)} target="_blank" rel="noreferrer" aria-label={s.label}
                     className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--card-border)] text-[var(--card-muted)] transition hover:scale-105 hover:text-[var(--primary)]">
@@ -177,33 +207,46 @@ function Inner({ data, slug, preview }: Props) {
                   </a>
                 ))}
               </div>
-            </div>
+            )}
+
+            {r.description && (
+              <p className="mt-3.5 line-clamp-2 border-t border-[var(--card-border)] pt-3 text-sm leading-snug text-[var(--card-muted)]">{r.description}</p>
+            )}
           </div>
         </div>
 
         {/* Acciones */}
-        <div className="mx-auto mt-4 flex max-w-4xl items-center justify-between gap-3 px-4">
-          <div className="flex flex-wrap items-center gap-2">
-          {contact && (
-            <a href={preview ? undefined : whatsappUrl(contact, `Hola, quisiera consultar en ${r.name}`)} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--btn)] px-4 py-2.5 text-sm font-semibold text-[var(--on-btn)] shadow-[0_8px_16px_-8px_var(--btn)] transition active:scale-95">
-              <Icon name="chat" className="h-4 w-4" /> Escríbenos por WhatsApp
-            </a>
-          )}
-          {r.delivery_time && (
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
-              <Ico n="clock" className="h-4 w-4" />{r.delivery_time}
+        <div className="mx-auto mt-4 flex max-w-4xl items-center justify-between gap-3 px-5">
+          {r.delivery_time ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
+              <Ico n="clock" className="h-4 w-4 shrink-0" /><span className="truncate">{r.delivery_time}</span>
             </span>
-          )}
+          ) : <span />}
+          <div className="flex shrink-0 items-center gap-2">
+            {contact && (
+              <a href={preview ? undefined : whatsappUrl(contact, `Hola, quisiera consultar en ${r.name}`)} target="_blank" rel="noreferrer" aria-label="Escribir por WhatsApp"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--btn)] text-[var(--on-btn)] shadow-[0_8px_16px_-8px_var(--btn)] transition active:scale-90">
+                <Icon name="whatsapp" className="h-6 w-6" />
+              </a>
+            )}
+            <button type="button" onClick={() => !preview && setInfoOpen(true)} aria-label="Información del local"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--text)] active:scale-90">
+              <Ico n="info" />
+            </button>
           </div>
-          <button type="button" onClick={() => !preview && setInfoOpen(true)} aria-label="Información del local"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--text)] active:scale-90">
-            <Ico n="info" />
-          </button>
         </div>
 
+        {closed && (
+          <div role="status" className="mx-auto mt-4 max-w-4xl px-4">
+            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+              <Ico n="clock" className="mt-0.5 h-4 w-4 shrink-0" />
+              <p><span className="font-semibold">Cerrado por ahora.</span> Puedes ver la carta y escribirnos por WhatsApp; los pedidos se habilitan cuando abramos.</p>
+            </div>
+          </div>
+        )}
+
         {branches.length > 1 && (
-          <div className="mx-auto mt-4 max-w-4xl px-4">
+          <div className="mx-auto mt-5 max-w-4xl px-4">
             <p className="mb-1 text-xs font-medium text-[var(--muted)]">Sucursal</p>
             <div className="flex flex-wrap gap-2">
               {branches.map((b) => (
@@ -215,7 +258,7 @@ function Inner({ data, slug, preview }: Props) {
         )}
 
         {searchOpen && (
-          <div className="anim-pop-in mx-auto mt-4 max-w-4xl px-4">
+          <div className="anim-pop-in mx-auto mt-5 max-w-4xl px-4">
             <div className="relative">
               <Ico n="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--card-muted)]" />
               <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar plato o bebida…" aria-label="Buscar en la carta"
@@ -230,7 +273,7 @@ function Inner({ data, slug, preview }: Props) {
 
       {/* Promociones */}
       {!q && promotions.length > 0 && (
-        <section className="mx-auto mt-6 max-w-4xl px-4" aria-label="Promociones">
+        <section className="mx-auto mt-7 max-w-4xl px-4" aria-label="Promociones">
           <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4">
             {promotions.map((p) => (
               <article key={p.id} className="w-64 shrink-0 overflow-hidden rounded-3xl bg-[var(--secondary)] text-[var(--on-secondary)] shadow-md">
@@ -244,13 +287,13 @@ function Inner({ data, slug, preview }: Props) {
 
       {/* Categorías */}
       {!q && cats.length > 0 && (
-        <nav className="mx-auto mt-4 max-w-4xl" aria-label="Categorías">
-          <div className="no-scrollbar flex gap-4 overflow-x-auto px-4 py-4">
+        <nav className="mx-auto mt-3 max-w-4xl" aria-label="Categorías">
+          <div className="no-scrollbar flex gap-3 overflow-x-auto px-5 py-5">
             {[{ id: null as string | null, name: 'Todo', image_url: null as string | null }, ...cats, ...(favs.length > 0 && !preview ? [{ id: FAV, name: 'Favoritos', image_url: null as string | null }] : [])].map((c) => {
               const active = activeCat === c.id
               return (
                 <button key={c.id ?? 'all'} type="button" onClick={() => chooseCat(c.id)} aria-pressed={active}
-                  className={`group flex shrink-0 flex-col items-center gap-2 ${rs('w-[72px]', 'sm:w-20')}`}>
+                  className={`group flex shrink-0 flex-col items-center gap-2 ${rs('w-20', 'sm:w-24')}`}>
                   <span className={`flex items-center justify-center overflow-hidden rounded-full bg-[var(--secondary)] text-xl font-bold text-[var(--primary)] transition duration-300 ${bubble} ${active ? 'scale-110 shadow-[0_10px_20px_-8px_var(--primary)] ring-[3px] ring-[color:var(--primary)] ring-offset-2 ring-offset-[color:var(--bg)]' : 'ring-1 ring-[color:var(--border)] group-hover:scale-105'}`}
                     style={c.id === null ? { background: 'linear-gradient(135deg, var(--primary), var(--btn))', color: 'var(--on-primary)' } : undefined}>
                     {c.id === null ? <Ico n="grid" className="h-6 w-6" />
@@ -283,7 +326,7 @@ function Inner({ data, slug, preview }: Props) {
                 return (
                   <ProductCard key={`${activeCat}-${p.id}`} p={p} available={available} theme={theme} cur={cur} preview={!!preview}
                     fav={favs.includes(p.id)} delay={i} onOpen={() => openProduct(p)}
-                    onAdd={() => !preview && available && cart.add(p)} onFav={() => toggleFav(p.id)} />
+                    onAdd={() => { if (preview || !available) return; if (closed) notifyClosed(); else cart.add(p) }} onFav={() => toggleFav(p.id)} />
                 )
               })}
             </div>
@@ -292,7 +335,7 @@ function Inner({ data, slug, preview }: Props) {
       </main>
 
       {/* Barra del pedido */}
-      {!preview && cart.count > 0 && (
+      {!preview && !closed && cart.count > 0 && (
         <div className="sticky bottom-0 z-20 bg-gradient-to-t from-[var(--nav-bg)] via-[var(--nav-bg)] to-transparent p-3">
           <button onClick={() => setCartOpen(true)}
             className="mx-auto flex w-full max-w-4xl items-center justify-between rounded-2xl bg-[var(--btn)] px-5 py-3.5 text-[var(--on-btn)] shadow-xl transition active:scale-[0.99]">
@@ -302,22 +345,29 @@ function Inner({ data, slug, preview }: Props) {
         </div>
       )}
 
-      {infoOpen && <InfoSheet r={r} address={address} phone={branch?.phone || r.phone} contact={contact} onClose={() => setInfoOpen(false)} />}
+      {closedToast && (
+        <div role="alert" className="anim-pop-in fixed inset-x-0 bottom-6 z-30 mx-auto w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-stone-900 px-4 py-3 text-center text-sm font-medium text-white shadow-xl">
+          El local está cerrado. Podrás hacer tu pedido cuando abra.
+        </div>
+      )}
+
+      {infoOpen && <InfoSheet r={r} address={address} mapHref={mapsHref} phone={branch?.phone || r.phone} contact={contact} onClose={() => setInfoOpen(false)} />}
       {selected && (
         <ProductSheet
           p={selected}
           available={isProductAvailable(selected, branch?.id)}
+          closed={closed}
           cur={cur}
           onClose={() => setSelected(null)}
           onAdd={() => {
-            if (isProductAvailable(selected, branch?.id)) {
+            if (!closed && isProductAvailable(selected, branch?.id)) {
               cart.add(selected)
               setSelected(null)
             }
           }}
         />
       )}
-      {cartOpen && (
+      {cartOpen && !closed && (
         <CartSheet
           restaurantId={r.id}
           restaurant={r.name}

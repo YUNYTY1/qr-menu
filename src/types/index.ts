@@ -30,6 +30,8 @@ export interface Restaurant {
   name: string
   description: string | null
   address: string | null
+  /** Enlace de Google Maps o coordenadas "lat, lng" (opcional) */
+  map_location?: string | null
   phone: string | null
   whatsapp: string | null
   currency: string
@@ -46,7 +48,7 @@ export interface Restaurant {
 }
 
 export type PublicRestaurant = Pick<Restaurant,
-  'id' | 'slug' | 'name' | 'description' | 'address' | 'phone' | 'whatsapp' | 'currency' | 'logo_url' | 'cover_url' | 'hours' | 'socials'
+  'id' | 'slug' | 'name' | 'description' | 'address' | 'map_location' | 'phone' | 'whatsapp' | 'currency' | 'logo_url' | 'cover_url' | 'hours' | 'socials'
   | 'cuisine' | 'city' | 'delivery_time' | 'timezone' | 'schedule'>
 
 export interface Subscription {
@@ -76,6 +78,8 @@ export interface Branch {
   restaurant_id: string
   name: string
   address: string | null
+  /** Enlace de Google Maps o coordenadas "lat, lng" (opcional) */
+  map_location?: string | null
   phone: string | null
   whatsapp: string | null
   is_active: boolean

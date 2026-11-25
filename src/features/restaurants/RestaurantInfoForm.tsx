@@ -4,6 +4,7 @@ import { errMsg } from '@/lib/errors'
 import { isPhone, isSlug } from '@/lib/validators'
 import { publicUrl } from '@/lib/tenant'
 import { DAY_ORDER, dayName, slotsToHours } from '@/lib/schedule'
+import { parseMapLocation } from '@/lib/maps'
 import type { Restaurant, ScheduleSlot, Socials } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Card, useToast } from '@/components/ui/Feedback'
@@ -25,6 +26,7 @@ export default function RestaurantInfoForm({ restaurant, canEditSlug, disabled, 
   const toast = useToast()
   const [f, setF] = useState({
     name: restaurant.name, slug: restaurant.slug, description: restaurant.description ?? '', address: restaurant.address ?? '',
+    map_location: restaurant.map_location ?? '',
     phone: restaurant.phone ?? '', whatsapp: restaurant.whatsapp ?? '', currency: restaurant.currency,
     cuisine: restaurant.cuisine ?? '', city: restaurant.city ?? '', delivery_time: restaurant.delivery_time ?? '',
     timezone: restaurant.timezone ?? 'America/Lima',
@@ -39,6 +41,7 @@ export default function RestaurantInfoForm({ restaurant, canEditSlug, disabled, 
   const legacyHours = restaurant.hours ?? []
   const hadSchedule = (restaurant.schedule?.length ?? 0) > 0
   const zones = TIMEZONES.some(([v]) => v === f.timezone) ? TIMEZONES : [...TIMEZONES, [f.timezone, f.timezone] as [string, string]]
+  const mapPreview = parseMapLocation(f.map_location)
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -47,6 +50,9 @@ export default function RestaurantInfoForm({ restaurant, canEditSlug, disabled, 
     if (canEditSlug && !isSlug(f.slug)) return setErr('La dirección solo admite minúsculas, números y guiones (3 a 40 caracteres).')
     if (f.whatsapp && !isPhone(f.whatsapp)) return setErr('El WhatsApp no parece un número válido.')
     if (f.phone && !isPhone(f.phone)) return setErr('El teléfono no parece válido.')
+    if (f.map_location.trim() && !parseMapLocation(f.map_location)) {
+      return setErr('La ubicación debe ser un enlace de Google Maps o coordenadas (ej.: -12.0464, -77.0428).')
+    }
     for (const s of schedule) {
       if (s.days.length === 0) return setErr('Elige al menos un día en cada horario.')
       if (!TIME.test(s.open) || !TIME.test(s.close)) return setErr('Completa la hora de apertura y de cierre de cada horario.')
@@ -60,6 +66,7 @@ export default function RestaurantInfoForm({ restaurant, canEditSlug, disabled, 
     try {
       const patch: Record<string, unknown> = {
         name: f.name.trim(), description: f.description.trim() || null, address: f.address.trim() || null,
+        map_location: f.map_location.trim() || null,
         phone: f.phone.trim() || null, whatsapp: f.whatsapp.trim() || null, currency: f.currency.trim() || 'S/',
         cuisine: f.cuisine.trim() || null, city: f.city.trim() || null, delivery_time: f.delivery_time.trim() || null,
         timezone: f.timezone, schedule: cleaned, hours, socials,
@@ -89,8 +96,16 @@ export default function RestaurantInfoForm({ restaurant, canEditSlug, disabled, 
           <Field label="Ciudad (opcional)" hint="Ej.: Ibagué"><Input value={f.city} onChange={set('city')} disabled={disabled} maxLength={60} /></Field>
           <Field label="Tiempo de entrega (opcional)" hint="Ej.: 35-40 min"><Input value={f.delivery_time} onChange={set('delivery_time')} disabled={disabled} maxLength={20} /></Field>
         </div>
-        <Field label="Descripción corta" hint="Se muestra sobre la portada de tu menú."><Textarea value={f.description} onChange={set('description')} disabled={disabled} maxLength={500} /></Field>
+        <Field label="Descripción corta" hint="Se muestra en la tarjeta de tu menú."><Textarea value={f.description} onChange={set('description')} disabled={disabled} maxLength={500} /></Field>
         <Field label="Dirección"><Input value={f.address} onChange={set('address')} disabled={disabled} /></Field>
+        <Field label="Ubicación en el mapa (opcional)" hint="Pega el enlace de Google Maps (botón Compartir) o las coordenadas, ej.: -12.0464, -77.0428. Si lo dejas vacío, el mapa se busca por la dirección.">
+          <Input value={f.map_location} onChange={set('map_location')} disabled={disabled} maxLength={300} placeholder="https://maps.app.goo.gl/… o -12.0464, -77.0428" />
+        </Field>
+        {mapPreview && (
+          <a href={mapPreview} target="_blank" rel="noreferrer" className="-mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline">
+            Probar ubicación ↗
+          </a>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Teléfono"><Input value={f.phone} onChange={set('phone')} disabled={disabled} inputMode="tel" /></Field>
           <Field label="WhatsApp para pedidos" hint="Número con o sin código de país"><Input value={f.whatsapp} onChange={set('whatsapp')} disabled={disabled} inputMode="tel" /></Field>
@@ -101,14 +116,14 @@ export default function RestaurantInfoForm({ restaurant, canEditSlug, disabled, 
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold">Horarios</h2>
-            <p className="text-xs text-slate-500">Con tus horarios, el menú muestra si estás Abierto o Cerrado.</p>
+            <p className="text-xs text-slate-500">Con tus horarios, el menú muestra si estás Abierto o Cerrado, y los pedidos se bloquean fuera de horario.</p>
           </div>
           <Button size="sm" variant="secondary" disabled={disabled || schedule.length >= 8} onClick={() => setSchedule([...schedule, { ...NEW_SLOT }])}>Agregar horario</Button>
         </div>
 
         {schedule.length === 0 && legacyHours.length > 0 && (
           <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-            Tu horario actual está escrito como texto: {legacyHours.map((h) => `${h.label}: ${h.value}`).join(' · ')}. Agrega un horario aquí para activar “Abierto / Cerrado”; reemplazará ese texto al guardar.
+            Tu horario actual está escrito como texto: {legacyHours.map((h) => `${h.label}: ${h.value}`).join(' · ')}. Agrega un horario aquí para activar “Abierto / Cerrado” y el bloqueo de pedidos fuera de horario; reemplazará ese texto al guardar.
           </p>
         )}
         {schedule.length === 0 && legacyHours.length === 0 && (

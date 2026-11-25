@@ -24,10 +24,11 @@ export function Sheet({ onClose, title, children }: { onClose: () => void; title
 }
 
 export function InfoSheet({
-  r, address, phone, contact, onClose,
+  r, address, mapHref, phone, contact, onClose,
 }: {
   r: PublicRestaurant
   address: string | null | undefined
+  mapHref?: string
   phone: string | null | undefined
   contact: string | null | undefined
   onClose: () => void
@@ -49,7 +50,14 @@ export function InfoSheet({
           </div>
         </div>
         {r.description && <p className="text-[var(--card-muted)]">{r.description}</p>}
-        {address && <p className="flex items-start gap-2"><Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />{address}</p>}
+        {address && (
+          <a href={mapHref} target="_blank" rel="noreferrer" aria-label="Ver ubicación en el mapa"
+            className="flex items-start gap-2 transition hover:text-[var(--primary)]">
+            <Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
+            <span className="underline decoration-dotted underline-offset-2">{address}</span>
+            <Icon name="external" className="mt-1 h-3.5 w-3.5 shrink-0 opacity-60" />
+          </a>
+        )}
         {r.delivery_time && <p className="flex items-center gap-2"><Ico n="clock" className="h-4 w-4 shrink-0 text-[var(--primary)]" />Entrega: {r.delivery_time}</p>}
         {phone && (
           <a href={`tel:${cleanPhone(phone)}`} className="flex items-center gap-2"><Ico n="phone" className="h-4 w-4 shrink-0 text-[var(--primary)]" />{phone}</a>
@@ -73,7 +81,7 @@ export function InfoSheet({
         {contact && (
           <a href={whatsappUrl(contact, `Hola, quisiera consultar en ${r.name}`)} target="_blank" rel="noreferrer"
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--btn)] py-3 font-semibold text-[var(--on-btn)]">
-            <Icon name="chat" /> Escríbenos por WhatsApp
+            <Icon name="whatsapp" /> Escríbenos por WhatsApp
           </a>
         )}
       </div>
@@ -84,12 +92,14 @@ export function InfoSheet({
 export function ProductSheet({
   p,
   available,
+  closed = false,
   cur,
   onClose,
   onAdd,
 }: {
   p: Product
   available: boolean
+  closed?: boolean
   cur: string
   onClose: () => void
   onAdd: () => void
@@ -110,9 +120,9 @@ export function ProductSheet({
         <h2 className="text-xl font-bold">{prettyTitle(p.name)}</h2>
         {p.description && <p className="text-sm text-[var(--card-muted)]">{prettySentence(p.description)}</p>}
         <p className="text-xl font-extrabold text-[var(--primary)]">{money(cur, p.price)}</p>
-        <button onClick={onAdd} disabled={!available}
+        <button onClick={onAdd} disabled={!available || closed}
           className="mt-2 w-full rounded-xl bg-[var(--btn)] py-3 font-semibold text-[var(--on-btn)] transition active:scale-[0.98] disabled:opacity-40">
-          {available ? 'Agregar al pedido' : 'Agotado'}
+          {closed ? 'Cerrado por ahora' : available ? 'Agregar al pedido' : 'Agotado'}
         </button>
       </div>
     </Sheet>
