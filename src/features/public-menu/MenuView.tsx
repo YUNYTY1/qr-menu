@@ -5,6 +5,7 @@ import { money } from '@/lib/format'
 import { prettyTitle } from '@/lib/text'
 import { whatsappUrl } from '@/lib/wa'
 import { supabase } from '@/lib/supabase'
+import { isOpenNow } from '@/lib/schedule'
 import Icon from '@/components/ui/Icon'
 import { CartProvider, useCart } from './cart'
 import { CartSheet } from './CartSheet'
@@ -51,6 +52,7 @@ function Inner({ data, slug, preview }: Props) {
     } catch { return [] }
   })
   const cur = r.currency || 'S/'
+  // En la vista previa del panel (celular simulado) no se usan clases responsivas
   const rs = (base: string, wide: string) => (preview ? base : `${base} ${wide}`)
 
   useEffect(() => { if (!preview) cart.sync(products) }, [products]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -65,6 +67,14 @@ function Inner({ data, slug, preview }: Props) {
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
   }, [searchOpen])
+
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
+  const openNow = isOpenNow(r.schedule, r.timezone, now)
+  const subtitle = [r.cuisine, r.city].filter(Boolean).join(' · ')
 
   const cats = categories.filter((c) => products.some((p) => p.category_id === c.id))
   const branch: Branch | undefined = branches.find((b) => b.id === branchId) ?? branches[0]
@@ -142,7 +152,15 @@ function Inner({ data, slug, preview }: Props) {
               {r.logo_url ? <img src={r.logo_url} alt={`Logo de ${r.name}`} className="h-full w-full object-cover" /> : r.name.charAt(0)}
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className={`break-words font-extrabold leading-tight ${rs('text-xl', 'sm:text-2xl')}`}>{r.name}</h1>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h1 className={`break-words font-extrabold leading-tight ${rs('text-xl', 'sm:text-2xl')}`}>{r.name}</h1>
+                {openNow !== null && (
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${openNow ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${openNow ? 'bg-emerald-600' : 'bg-red-600'}`} />{openNow ? 'Abierto' : 'Cerrado'}
+                  </span>
+                )}
+              </div>
+              {subtitle && <p className="mt-0.5 text-sm text-[var(--card-muted)]">{subtitle}</p>}
               <div className="mt-1.5 space-y-1 text-sm text-[var(--card-muted)]">
                 {address && (
                   <p className="flex items-start gap-2"><Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />{address}</p>
@@ -165,12 +183,19 @@ function Inner({ data, slug, preview }: Props) {
 
         {/* Acciones */}
         <div className="mx-auto mt-4 flex max-w-4xl items-center justify-between gap-3 px-4">
-          {contact ? (
+          <div className="flex flex-wrap items-center gap-2">
+          {contact && (
             <a href={preview ? undefined : whatsappUrl(contact, `Hola, quisiera consultar en ${r.name}`)} target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-full bg-[var(--btn)] px-4 py-2.5 text-sm font-semibold text-[var(--on-btn)] shadow-[0_8px_16px_-8px_var(--btn)] transition active:scale-95">
               <Icon name="chat" className="h-4 w-4" /> Escríbenos por WhatsApp
             </a>
-          ) : <span />}
+          )}
+          {r.delivery_time && (
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--muted)]">
+              <Ico n="clock" className="h-4 w-4" />{r.delivery_time}
+            </span>
+          )}
+          </div>
           <button type="button" onClick={() => !preview && setInfoOpen(true)} aria-label="Información del local"
             className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--text)] active:scale-90">
             <Ico n="info" />
