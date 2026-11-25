@@ -1,10 +1,11 @@
 import QRCode from 'qrcode'
 
 export const qrDataUrl = (text: string, width = 512) =>
-  QRCode.toDataURL(text, { width, margin: 2, errorCorrectionLevel: 'M' })
+  QRCode.toDataURL(text.trim(), { width, margin: 2, errorCorrectionLevel: 'M' })
 
 /** Cartel imprimible A4 (150 dpi) con el QR del menú. */
 export async function posterBlob(url: string, name: string, color: string): Promise<Blob> {
+  const cleanUrl = url.trim()
   const W = 1240, H = 1754
   const c = document.createElement('canvas')
   c.width = W; c.height = H
@@ -19,12 +20,12 @@ export async function posterBlob(url: string, name: string, color: string): Prom
   ctx.font = '600 64px Inter, Arial, sans-serif'
   ctx.fillText('Escanea y mira nuestra carta', W / 2, 480)
   const img = new Image()
-  img.src = await qrDataUrl(url, 900)
+  img.src = await qrDataUrl(cleanUrl, 900)
   await new Promise((res, rej) => { img.onload = res; img.onerror = rej })
   ctx.drawImage(img, (W - 800) / 2, 600, 800, 800)
   ctx.fillStyle = '#6b7280'
   ctx.font = '400 34px Inter, Arial, sans-serif'
-  ctx.fillText(url, W / 2, 1520)
+  ctx.fillText(cleanUrl, W / 2, 1520)
   ctx.font = '400 28px Inter, Arial, sans-serif'
   ctx.fillText('Pide por WhatsApp desde tu celular', W / 2, 1600)
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('No se pudo generar el cartel'))), 'image/png'))
