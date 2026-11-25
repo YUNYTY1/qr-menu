@@ -21,6 +21,8 @@ export interface Plan {
 
 export interface HourRow { label: string; value: string }
 export interface Socials { instagram?: string; facebook?: string; tiktok?: string; website?: string }
+/** Franja de horario: days 0 = domingo ... 6 = sábado; open/close en "HH:MM" (24 h). */
+export interface ScheduleSlot { days: number[]; open: string; close: string }
 
 export interface Restaurant {
   id: string
@@ -35,11 +37,17 @@ export interface Restaurant {
   cover_url: string | null
   hours: HourRow[]
   socials: Socials
+  cuisine?: string | null
+  city?: string | null
+  delivery_time?: string | null
+  timezone?: string
+  schedule?: ScheduleSlot[]
   created_at: string
 }
 
 export type PublicRestaurant = Pick<Restaurant,
-  'id' | 'slug' | 'name' | 'description' | 'address' | 'phone' | 'whatsapp' | 'currency' | 'logo_url' | 'cover_url' | 'hours' | 'socials'>
+  'id' | 'slug' | 'name' | 'description' | 'address' | 'phone' | 'whatsapp' | 'currency' | 'logo_url' | 'cover_url' | 'hours' | 'socials'
+  | 'cuisine' | 'city' | 'delivery_time' | 'timezone' | 'schedule'>
 
 export interface Subscription {
   id: string

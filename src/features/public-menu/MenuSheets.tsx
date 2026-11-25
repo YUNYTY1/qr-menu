@@ -43,10 +43,14 @@ export function InfoSheet({
           <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--secondary)] text-xl font-bold text-[var(--primary)]">
             {r.logo_url ? <img src={r.logo_url} alt="" className="h-full w-full object-cover" /> : r.name.charAt(0)}
           </div>
-          <p className="text-base font-bold">{r.name}</p>
+          <div>
+            <p className="text-base font-bold">{r.name}</p>
+            {(r.cuisine || r.city) && <p className="text-xs text-[var(--card-muted)]">{[r.cuisine, r.city].filter(Boolean).join(' · ')}</p>}
+          </div>
         </div>
         {r.description && <p className="text-[var(--card-muted)]">{r.description}</p>}
         {address && <p className="flex items-start gap-2"><Icon name="location" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />{address}</p>}
+        {r.delivery_time && <p className="flex items-center gap-2"><Ico n="clock" className="h-4 w-4 shrink-0 text-[var(--primary)]" />Entrega: {r.delivery_time}</p>}
         {phone && (
           <a href={`tel:${cleanPhone(phone)}`} className="flex items-center gap-2"><Ico n="phone" className="h-4 w-4 shrink-0 text-[var(--primary)]" />{phone}</a>
         )}
@@ -78,7 +82,11 @@ export function InfoSheet({
 }
 
 export function ProductSheet({
-  p, available, cur, onClose, onAdd,
+  p,
+  available,
+  cur,
+  onClose,
+  onAdd,
 }: {
   p: Product
   available: boolean
