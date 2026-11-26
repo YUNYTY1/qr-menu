@@ -28,12 +28,12 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
       role="alert"
       className="anim-pop-in rounded-2xl border border-rose-200 bg-rose-50/90 p-4 text-sm text-rose-900 shadow-xs"
     >
-      <p className="font-medium">{message}</p>
+      <p className="break-words font-medium">{message}</p>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="mt-2.5 inline-flex items-center rounded-lg bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800 transition-all duration-150 hover:bg-rose-200 active:scale-95"
+          className="mt-2.5 inline-flex min-h-[40px] items-center rounded-lg bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800 transition-all duration-150 hover:bg-rose-200 active:scale-95 sm:min-h-0"
         >
           Reintentar
         </button>
@@ -52,7 +52,7 @@ export function EmptyState({
   action?: ReactNode
 }) {
   return (
-    <div className="anim-pop-in rounded-3xl border border-dashed border-slate-300/90 bg-white/90 p-10 text-center shadow-xs">
+    <div className="anim-pop-in rounded-3xl border border-dashed border-slate-300/90 bg-white/90 p-6 text-center shadow-xs sm:p-10">
       <p className="text-base font-bold tracking-tight text-slate-800">{title}</p>
       {hint && <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500">{hint}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
@@ -93,7 +93,7 @@ export function Pill({
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs transition-all duration-200 ease-out ${className}`}
+      className={`min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all duration-200 ease-out sm:p-5 ${className}`}
     >
       {children}
     </div>
@@ -112,12 +112,16 @@ export function StatCard({
   return (
     <Card className="anim-pop-in relative overflow-hidden hover:-translate-y-0.5 hover:shadow-md">
       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{value}</p>
+      <p className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">{value}</p>
       {hint && <p className="mt-1.5 text-xs font-medium text-slate-500">{hint}</p>}
     </Card>
   )
 }
 
+/**
+ * Encabezado de página. En celular el título va arriba y las acciones debajo,
+ * con los botones repartiéndose todo el ancho; desde tableta van al costado.
+ */
 export function PageHeader({
   title,
   subtitle,
@@ -128,12 +132,16 @@ export function PageHeader({
   actions?: ReactNode
 }) {
   return (
-    <div className="anim-fade-in mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-[26px]">{title}</h1>
+    <div className="anim-fade-in mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="break-words text-2xl font-extrabold tracking-tight text-slate-900 sm:text-[26px]">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end [&>a]:flex-1 [&>button]:flex-1 sm:[&>a]:flex-none sm:[&>button]:flex-none">
+          {actions}
+        </div>
+      )}
     </div>
   )
 }
@@ -157,14 +165,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
+      {/* En celular los avisos quedan por encima de la barra inferior */}
       <div
-        className="pointer-events-none fixed bottom-20 inset-x-4 z-[100] flex flex-col items-center gap-2 sm:bottom-5 sm:inset-x-auto sm:right-5 sm:items-end"
+        className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] inset-x-4 z-[100] flex flex-col items-center gap-2 sm:bottom-5 sm:inset-x-auto sm:right-5 sm:items-end"
         aria-live="polite"
       >
         {items.map((t) => (
           <div
             key={t.id}
-            className={`anim-sheet-in pointer-events-auto w-full max-w-sm rounded-2xl px-4 py-3 text-sm font-medium shadow-xl ${color[t.type]}`}
+            className={`anim-sheet-in pointer-events-auto w-full max-w-sm break-words rounded-2xl px-4 py-3 text-sm font-medium shadow-xl ${color[t.type]}`}
           >
             {t.msg}
           </div>

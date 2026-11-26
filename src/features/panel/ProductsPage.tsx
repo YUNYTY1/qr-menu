@@ -11,7 +11,7 @@ import { Card, EmptyState, ErrorBox, PageHeader, PageLoader, Pill, useToast } fr
 import { Field, Input, Select, Textarea, Toggle } from '@/components/ui/Form'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import ImageUpload from '@/components/ui/ImageUpload'
-import Icon from '@/components/ui/Icon'
+import Icon, { type IconName } from '@/components/ui/Icon'
 import ImportMenuModal from './ImportMenuModal'
 import { useRestaurant } from './RestaurantContext'
 
@@ -25,6 +25,38 @@ interface Form {
   is_available: boolean
   is_published: boolean
   unavailable_branch_ids: string[]
+}
+
+/** Tres puntos (menú de más acciones) */
+function DotsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+    </svg>
+  )
+}
+
+/** Fila grande y fácil de tocar para la hoja de acciones (celular) */
+function SheetAction({ icon, label, onClick, disabled, danger }: {
+  icon: IconName; label: string; onClick: () => void; disabled?: boolean; danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold transition active:scale-[0.99] disabled:opacity-40 ${
+        danger ? 'text-rose-600 active:bg-rose-50' : 'text-slate-700 active:bg-slate-100'
+      }`}
+    >
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${danger ? 'bg-rose-50' : 'bg-slate-100 text-slate-600'}`}>
+        <Icon name={icon} className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </button>
+  )
 }
 
 export default function ProductsPage() {
@@ -43,6 +75,7 @@ export default function ProductsPage() {
   const [cat, setCat] = useState('')
   const [form, setForm] = useState<Form | null>(null)
   const [del, setDel] = useState<Product | null>(null)
+  const [menuFor, setMenuFor] = useState<Product | null>(null)
   const [importing, setImporting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -181,8 +214,16 @@ export default function ProductsPage() {
     }
   }
 
+  function toggleAvailable(p: Product) {
+    return patch(p, { is_available: !p.is_available }, p.is_available ? 'Marcado como agotado' : 'Disponible nuevamente')
+  }
+
+  function togglePublished(p: Product) {
+    return patch(p, { is_published: !p.is_published }, p.is_published ? 'Producto oculto' : 'Producto publicado')
+  }
+
   return (
-    <div className="pb-20 sm:pb-6">
+    <div>
       <PageHeader
         title="Productos"
         subtitle={`${total} de ${max < 0 ? 'ilimitados' : max} productos en tu carta`}
@@ -192,14 +233,14 @@ export default function ProductsPage() {
               variant="secondary"
               disabled={!canWrite || reached}
               onClick={() => setImporting(true)}
-              className="flex-1 justify-center rounded-xl sm:flex-initial"
+              className="flex-1 justify-center whitespace-nowrap sm:flex-initial"
             >
               ✨ Importar con IA
             </Button>
             <Button
               disabled={!canWrite || reached}
               onClick={openNew}
-              className="flex-1 justify-center rounded-xl sm:flex-initial"
+              className="flex-1 justify-center whitespace-nowrap sm:flex-initial"
             >
               <Icon name="plus" className="h-4 w-4" /> Nuevo producto
             </Button>
@@ -223,7 +264,7 @@ export default function ProductsPage() {
           action={
             <Link
               to={`/panel/${restaurant.id}/categories`}
-              className="inline-flex items-center rounded-xl bg-orange-50 px-3.5 py-2 text-sm font-semibold text-orange-700 transition-all duration-150 hover:bg-orange-100 active:scale-95"
+              className="inline-flex min-h-[44px] items-center rounded-xl bg-orange-50 px-3.5 py-2 text-sm font-semibold text-orange-700 transition-all duration-150 hover:bg-orange-100 active:scale-95"
             >
               Ir a categorías →
             </Link>
@@ -233,6 +274,7 @@ export default function ProductsPage() {
 
       {data && data.categories.length > 0 && (
         <>
+          {/* Búsqueda y filtros: en celular, buscador + chips de categoría (sin el desplegable) */}
           <div className="anim-fade-in mb-4 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs">
             <div className="grid gap-2.5 sm:grid-cols-[1fr_220px]">
               <Input
@@ -244,7 +286,7 @@ export default function ProductsPage() {
               <Select
                 value={cat}
                 onChange={(e) => setCat(e.target.value)}
-                className="!rounded-xl"
+                className="hidden !rounded-xl sm:block"
               >
                 <option value="">Todas las categorías</option>
                 {data.categories.map((c) => (
@@ -259,7 +301,7 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={() => setCat('')}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 active:scale-95 ${
+                className={`min-h-[36px] shrink-0 rounded-full px-3.5 py-1 text-xs font-semibold transition-all duration-150 active:scale-95 ${
                   cat === ''
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -272,7 +314,7 @@ export default function ProductsPage() {
                   key={c.id}
                   type="button"
                   onClick={() => setCat(c.id)}
-                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 active:scale-95 ${
+                  className={`min-h-[36px] shrink-0 whitespace-nowrap rounded-full px-3.5 py-1 text-xs font-semibold transition-all duration-150 active:scale-95 ${
                     cat === c.id
                       ? 'bg-orange-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -291,13 +333,13 @@ export default function ProductsPage() {
             />
           )}
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {filtered.map((p) => {
               const unavailCount = p.unavailable_branch_ids?.length ?? 0
               return (
                 <Card
                   key={p.id}
-                  className={`anim-pop-in group flex gap-3.5 rounded-2xl border border-slate-200/80 !p-3.5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md active:scale-[0.99] ${
+                  className={`anim-pop-in group flex gap-3 rounded-2xl border border-slate-200/80 !p-3 shadow-xs transition-all duration-200 sm:gap-3.5 sm:!p-3.5 sm:hover:-translate-y-0.5 sm:hover:border-orange-200 sm:hover:shadow-md ${
                     animId === p.id ? 'scale-[1.01] ring-2 ring-orange-400/70' : ''
                   } ${!p.is_published || !p.is_available ? 'bg-slate-50/70' : 'bg-white'}`}
                 >
@@ -305,7 +347,8 @@ export default function ProductsPage() {
                     type="button"
                     disabled={!canWrite}
                     onClick={() => openEdit(p)}
-                    className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-1 ring-slate-200/70 transition-all duration-150 group-hover:ring-orange-300 active:scale-95 disabled:cursor-default"
+                    aria-label={`Editar ${p.name}`}
+                    className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-slate-400 ring-1 ring-slate-200/70 transition-all duration-150 active:scale-95 disabled:cursor-default sm:h-24 sm:w-24 sm:group-hover:ring-orange-300"
                   >
                     {p.image_url ? (
                       <img
@@ -321,27 +364,26 @@ export default function ProductsPage() {
 
                   <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <button
                           type="button"
                           disabled={!canWrite}
                           onClick={() => openEdit(p)}
-                          className="block max-w-full truncate text-left font-semibold text-slate-900 transition-colors hover:text-orange-600 disabled:cursor-default"
+                          className="line-clamp-2 w-full break-words text-left text-[15px] font-semibold leading-snug text-slate-900 transition-colors hover:text-orange-600 disabled:cursor-default"
                         >
                           {p.name}
                         </button>
-                        <p className="text-xs font-medium text-slate-500">
+                        <p className="truncate text-xs font-medium text-slate-500">
                           {catName.get(p.category_id)}
                         </p>
                       </div>
-                      <span className="shrink-0 rounded-lg bg-orange-50 px-2 py-0.5 text-sm font-bold text-orange-700 transition-transform duration-150 group-hover:scale-105">
+                      <span className="shrink-0 whitespace-nowrap rounded-lg bg-orange-50 px-2 py-0.5 text-sm font-bold text-orange-700">
                         {money(restaurant.currency, p.price)}
                       </span>
                     </div>
 
-                    {(!p.is_available || !p.is_published || unavailCount > 0) && (
+                    {(!p.is_published || unavailCount > 0) && (
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {!p.is_available && <Pill tone="red">Agotado</Pill>}
                         {!p.is_published && <Pill tone="amber">Oculto</Pill>}
                         {unavailCount > 0 && (
                           <Pill tone="amber">
@@ -351,49 +393,55 @@ export default function ProductsPage() {
                       </div>
                     )}
 
-                    <div className="mt-auto flex flex-wrap items-center gap-1 pt-2.5">
+                    {/* Celular: interruptor Disponible/Agotado + editar + menú de más acciones */}
+                    <div className="mt-auto flex items-center justify-between gap-2 pt-2 sm:hidden">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={p.is_available}
+                        disabled={!canWrite}
+                        onClick={() => toggleAvailable(p)}
+                        className="flex min-h-[40px] min-w-0 items-center gap-2 rounded-lg pr-1 text-xs font-semibold text-slate-600 disabled:opacity-50"
+                      >
+                        <span className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${p.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                          <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${p.is_available ? 'translate-x-4' : ''}`} />
+                        </span>
+                        <span className="truncate">{p.is_available ? 'Disponible' : 'Agotado'}</span>
+                      </button>
+                      <div className="flex shrink-0 items-center">
+                        <IconButton label="Editar" disabled={!canWrite} onClick={() => openEdit(p)}>
+                          <Icon name="edit" className="h-5 w-5" />
+                        </IconButton>
+                        <IconButton label="Más acciones" disabled={!canWrite} onClick={() => setMenuFor(p)}>
+                          <DotsIcon />
+                        </IconButton>
+                      </div>
+                    </div>
+
+                    {/* Tableta y escritorio: todas las acciones a la vista */}
+                    <div className="mt-auto hidden flex-wrap items-center gap-1 pt-2.5 sm:flex">
                       <Button
                         size="sm"
                         variant={p.is_available ? 'ghost' : 'secondary'}
                         disabled={!canWrite}
-                        onClick={() =>
-                          patch(
-                            p,
-                            { is_available: !p.is_available },
-                            p.is_available ? 'Marcado como agotado' : 'Disponible nuevamente'
-                          )
-                        }
+                        onClick={() => toggleAvailable(p)}
                         className="h-8 rounded-lg px-2.5 text-xs"
                       >
                         {p.is_available ? 'Marcar agotado' : 'Disponible'}
                       </Button>
 
-                      <IconButton
-                        label="Editar"
-                        disabled={!canWrite}
-                        onClick={() => openEdit(p)}
-                      >
+                      <IconButton label="Editar" disabled={!canWrite} onClick={() => openEdit(p)}>
                         <Icon name="edit" className="h-4 w-4" />
                       </IconButton>
 
-                      <IconButton
-                        label="Duplicar"
-                        disabled={!canWrite || reached}
-                        onClick={() => duplicate(p)}
-                      >
+                      <IconButton label="Duplicar" disabled={!canWrite || reached} onClick={() => duplicate(p)}>
                         <Icon name="copy" className="h-4 w-4" />
                       </IconButton>
 
                       <IconButton
                         label={p.is_published ? 'Ocultar temporalmente' : 'Publicar'}
                         disabled={!canWrite}
-                        onClick={() =>
-                          patch(
-                            p,
-                            { is_published: !p.is_published },
-                            p.is_published ? 'Producto oculto' : 'Producto publicado'
-                          )
-                        }
+                        onClick={() => togglePublished(p)}
                       >
                         <Icon name={p.is_published ? 'eye' : 'eyeoff'} className="h-4 w-4" />
                       </IconButton>
@@ -415,16 +463,35 @@ export default function ProductsPage() {
         </>
       )}
 
-      {canWrite && !reached && (
-        <button
-          type="button"
-          onClick={openNew}
-          aria-label="Nuevo producto"
-          className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-orange-500 to-orange-600 text-white shadow-xl shadow-orange-600/35 transition-all duration-150 hover:scale-105 hover:from-orange-600 hover:to-orange-700 active:scale-90 sm:hidden"
-        >
-          <Icon name="plus" className="h-6 w-6" />
-        </button>
-      )}
+      {/* Hoja de acciones (solo se abre desde el celular) */}
+      <Modal open={!!menuFor} onClose={() => setMenuFor(null)} title={menuFor?.name ?? ''}>
+        {menuFor && (
+          <div className="-mx-2 grid gap-1">
+            <SheetAction
+              icon="edit"
+              label="Editar producto"
+              onClick={() => { const p = menuFor; setMenuFor(null); openEdit(p) }}
+            />
+            <SheetAction
+              icon="copy"
+              label="Duplicar"
+              disabled={reached}
+              onClick={() => { const p = menuFor; setMenuFor(null); duplicate(p) }}
+            />
+            <SheetAction
+              icon={menuFor.is_published ? 'eye' : 'eyeoff'}
+              label={menuFor.is_published ? 'Ocultar temporalmente' : 'Publicar'}
+              onClick={() => { const p = menuFor; setMenuFor(null); togglePublished(p) }}
+            />
+            <SheetAction
+              icon="trash"
+              label="Eliminar"
+              danger
+              onClick={() => { const p = menuFor; setMenuFor(null); setDel(p) }}
+            />
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={!!form}
@@ -433,10 +500,10 @@ export default function ProductsPage() {
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setForm(null)} className="w-full sm:w-auto">
+            <Button variant="secondary" onClick={() => setForm(null)}>
               Cancelar
             </Button>
-            <Button loading={busy} onClick={save} className="w-full sm:w-auto">
+            <Button loading={busy} onClick={save}>
               Guardar producto
             </Button>
           </>
@@ -491,7 +558,7 @@ export default function ProductsPage() {
               value={form.image_url}
               onChange={(u) => setForm({ ...form, image_url: u })}
             />
-            <div className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl bg-slate-50 p-3.5">
+            <div className="flex flex-wrap gap-x-8 gap-y-1 rounded-xl bg-slate-50 p-3.5">
               <Toggle
                 checked={form.is_available}
                 onChange={(v) => setForm({ ...form, is_available: v })}
@@ -518,15 +585,15 @@ export default function ProductsPage() {
                     return (
                       <label
                         key={b.id}
-                        className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-orange-200"
+                        className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-orange-200"
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={(e) => toggleBranchAvailability(b.id, e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                          className="h-5 w-5 shrink-0 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
                         />
-                        <span className="truncate font-medium">{b.name}</span>
+                        <span className="min-w-0 truncate font-medium">{b.name}</span>
                       </label>
                     )
                   })}

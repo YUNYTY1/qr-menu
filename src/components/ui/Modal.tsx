@@ -36,25 +36,25 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`anim-sheet-in flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200/80 bg-white shadow-2xl sm:rounded-2xl ${
+        className={`anim-sheet-in flex max-h-[92dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-3xl border border-slate-200/80 bg-white shadow-2xl sm:rounded-2xl ${
           size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
         }`}
       >
         <div className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-slate-200 sm:hidden" aria-hidden="true" />
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 sm:py-4">
-          <h2 className="text-base font-bold tracking-tight text-slate-900 sm:text-lg">{title}</h2>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5 sm:py-4">
+          <h2 className="min-w-0 truncate text-base font-bold tracking-tight text-slate-900 sm:text-lg">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded-xl p-1.5 text-slate-500 transition-all duration-150 hover:bg-slate-100 hover:text-slate-800 active:scale-90"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-all duration-150 hover:bg-slate-100 hover:text-slate-800 active:scale-90 sm:h-9 sm:w-9"
           >
             <Icon name="close" />
           </button>
         </div>
-        <div className="space-y-4 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="min-w-0 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3.5 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:pb-3.5 [&>button]:w-full sm:[&>button]:w-auto">
             {footer}
           </div>
         )}
@@ -86,13 +86,12 @@ export function ConfirmDialog({
       title={title}
       footer={
         <>
-          <Button variant="secondary" onClick={onCancel} className="w-full sm:w-auto">
+          <Button variant="secondary" onClick={onCancel}>
             Cancelar
           </Button>
           <Button
             variant="danger"
             loading={busy}
-            className="w-full sm:w-auto"
             onClick={async () => {
               setBusy(true)
               try {
@@ -107,7 +106,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="text-sm leading-relaxed text-slate-600">{message}</p>
+      <p className="break-words text-sm leading-relaxed text-slate-600">{message}</p>
     </Modal>
   )
 }

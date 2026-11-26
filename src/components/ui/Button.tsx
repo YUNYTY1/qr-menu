@@ -28,7 +28,10 @@ export function Button({
   type = 'button',
   ...rest
 }: Props) {
-  const sz = size === 'sm' ? 'px-3 py-1.5 text-xs rounded-xl' : 'px-4 py-2.5 text-sm rounded-xl'
+  // En celular los botones miden al menos 44 px de alto (cómodos para el dedo)
+  const sz = size === 'sm'
+    ? 'min-h-[40px] px-3 py-1.5 text-xs rounded-xl sm:min-h-0'
+    : 'min-h-[44px] px-4 py-2.5 text-sm rounded-xl sm:min-h-0'
   return (
     <button
       type={type}
@@ -53,7 +56,7 @@ export function IconButton({
       type="button"
       title={label}
       aria-label={label}
-      className={`select-none rounded-xl p-2 text-slate-500 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:bg-slate-100 hover:text-slate-900 active:translate-y-0 active:scale-90 disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`inline-flex h-10 w-10 shrink-0 select-none items-center justify-center rounded-xl text-slate-500 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:bg-slate-100 hover:text-slate-900 active:translate-y-0 active:scale-90 disabled:translate-y-0 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:w-9 ${className}`}
       {...rest}
     >
       {children}

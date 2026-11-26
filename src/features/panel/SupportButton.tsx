@@ -50,15 +50,15 @@ export default function SupportButton({ restaurantName }: { restaurantName?: str
       target="_blank"
       rel="noreferrer"
       aria-label="Pedir ayuda por WhatsApp a Underty"
-      className="group fixed bottom-5 right-5 z-40 flex items-center gap-2"
+      className="group fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 lg:bottom-5 lg:right-5"
     >
-      <span className={`overflow-hidden whitespace-nowrap rounded-full bg-slate-900 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-300 ${label}`}>
+      <span className={`hidden overflow-hidden whitespace-nowrap rounded-full sm:block bg-slate-900 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-300 ${label}`}>
         ¿Necesitas ayuda?
       </span>
-      <span className="relative flex h-14 w-14 shrink-0">
+      <span className="relative flex h-12 w-12 shrink-0 lg:h-14 lg:w-14">
         <span className="absolute inset-0 animate-ping rounded-full bg-[#25D366] opacity-40" aria-hidden="true" />
         <span className="relative flex h-full w-full items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-900/30 transition duration-200 group-hover:scale-110 group-active:scale-95">
-          <Icon name="whatsapp" className="h-7 w-7" />
+          <Icon name="whatsapp" className="h-6 w-6 lg:h-7 lg:w-7" />
         </span>
       </span>
     </a>,
