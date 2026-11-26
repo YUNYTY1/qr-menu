@@ -103,7 +103,7 @@ export function ProductCard({
   // ---- Cuadrícula (2 columnas) y Carrusel: tarjeta vertical con foto cuadrada ----
   if (layout === 'cuadricula' || layout === 'carrusel') {
     return (
-      <article onClick={onOpen} style={pop} className={`${base} flex flex-col ${layout === 'carrusel' ? 'w-40 shrink-0 snap-start' : ''}`}>
+      <article onClick={onOpen} style={pop} className={`${base} flex flex-col ${layout === 'carrusel' ? 'w-36 shrink-0 snap-start sm:w-40' : ''}`}>
         <div className="relative">
           <Media p={p} available={available} className="aspect-square w-full" />
           {!available && <span className="absolute left-1.5 top-1.5 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-semibold text-white">Agotado</span>}
