@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 
-const base = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 disabled:bg-slate-100 disabled:text-slate-500'
+// En celular los campos usan texto de 16 px (evita el zoom automático de iPhone al escribir) y miden al menos 44 px
+const base = 'w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 disabled:bg-slate-100 disabled:text-slate-500 sm:py-2 sm:text-sm'
 
 const QUICK_COLORS = [
   '#ea580c', '#dc2626', '#d97706', '#16a34a',
@@ -59,7 +60,7 @@ function hsvToHex(h: number, s: number, v: number): string {
 
 export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
       {children}
       {hint && !error && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
@@ -74,12 +75,12 @@ export const Select = (p: SelectHTMLAttributes<HTMLSelectElement>) => <select {.
 
 export function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
-    <label className={`flex items-center gap-3 ${disabled ? 'opacity-50' : 'cursor-pointer'}`}>
+    <label className={`flex min-h-[44px] items-center gap-3 sm:min-h-0 ${disabled ? 'opacity-50' : 'cursor-pointer'}`}>
       <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
         className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? 'bg-brand-600' : 'bg-slate-300'}`}>
         <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'translate-x-5' : ''}`} />
       </button>
-      <span className="text-sm text-slate-700">{label}</span>
+      <span className="min-w-0 text-sm text-slate-700">{label}</span>
     </label>
   )
 }
@@ -146,7 +147,7 @@ export function ColorField({ label, value, onChange, disabled }: { label: string
   const safePreview = /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#ea580c'
 
   return (
-    <div ref={boxRef} className="relative">
+    <div ref={boxRef} className="relative min-w-0">
       <Field label={label}>
         <div className="flex items-center gap-2">
           <input
@@ -155,13 +156,13 @@ export function ColorField({ label, value, onChange, disabled }: { label: string
             disabled={disabled}
             onChange={(e) => onChange(e.target.value)}
             title="Selector del sistema"
-            className="h-10 w-11 shrink-0 cursor-pointer rounded-lg border border-slate-300 bg-white p-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-11 w-11 shrink-0 cursor-pointer rounded-lg border border-slate-300 bg-white p-1 disabled:cursor-not-allowed disabled:opacity-50 sm:h-10"
           />
           <button
             type="button"
             disabled={disabled}
             onClick={() => setOpen((o) => !o)}
-            className="h-10 shrink-0 rounded-lg border border-slate-300 bg-slate-50 px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-11 shrink-0 rounded-lg border border-slate-300 bg-slate-50 px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:h-10"
           >
             Paleta
           </button>
@@ -170,7 +171,7 @@ export function ColorField({ label, value, onChange, disabled }: { label: string
             disabled={disabled}
             maxLength={7}
             onChange={(e) => onChange(e.target.value)}
-            className="font-mono"
+            className="min-w-0 font-mono"
           />
         </div>
       </Field>
@@ -223,7 +224,7 @@ export function ColorField({ label, value, onChange, disabled }: { label: string
                 }}
                 style={{ backgroundColor: hex }}
                 aria-label={`Color ${hex}`}
-                className={`h-6 w-full rounded-md border ${
+                className={`h-8 w-full rounded-md border sm:h-6 ${
                   safePreview.toLowerCase() === hex.toLowerCase()
                     ? 'border-slate-900 ring-2 ring-brand-500/40'
                     : 'border-slate-200'
@@ -237,7 +238,7 @@ export function ColorField({ label, value, onChange, disabled }: { label: string
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-lg bg-slate-900 px-2.5 py-1 font-semibold text-white hover:bg-slate-800"
+              className="min-h-[36px] rounded-lg bg-slate-900 px-3 py-1 font-semibold text-white hover:bg-slate-800 sm:min-h-0 sm:px-2.5"
             >
               Listo
             </button>
