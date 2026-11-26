@@ -73,6 +73,33 @@ export function ProductCard({
   const pop = { animationDelay: `${Math.min(delay, 8) * 45}ms` }
   const base = `anim-pop-in relative cursor-pointer overflow-hidden transition duration-300 active:scale-[0.99] ${ink} ${card}`
 
+  // ---- Cuadrícula simple: estilo limpio de 2 columnas con foto arriba, botón + flotante, precio y nombre ----
+  if (layout === 'simple') {
+    return (
+      <article onClick={onOpen} style={pop} className="anim-pop-in flex cursor-pointer flex-col text-[var(--text)] transition active:scale-[0.99]">
+        <div className="relative">
+          <Media p={p} available={available} className="aspect-square w-full rounded-2xl" />
+          {!available && (
+            <span className="absolute left-2 top-2 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-semibold text-white">
+              Agotado
+            </span>
+          )}
+          <div className="absolute right-2 top-2">
+            <AddBtn name={name} available={available} onAdd={onAdd} />
+          </div>
+        </div>
+        <div className="mt-2 min-w-0">
+          <span className="block whitespace-nowrap text-base font-extrabold leading-tight">
+            {money(cur, p.price)}
+          </span>
+          <h3 className="mt-1 line-clamp-2 break-words text-sm font-medium leading-snug text-[var(--muted)]">
+            {name}
+          </h3>
+        </div>
+      </article>
+    )
+  }
+
   // ---- Cuadrícula (2 columnas) y Carrusel: tarjeta vertical con foto cuadrada ----
   if (layout === 'cuadricula' || layout === 'carrusel') {
     return (

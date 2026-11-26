@@ -136,7 +136,8 @@ function Inner({ data, slug, preview }: Props) {
       case 'texto': return 'flex flex-col gap-2'
       case 'cuadricula': return `grid grid-cols-2 gap-3 ${preview ? '' : 'sm:grid-cols-3'}`
       case 'compacta': return `grid grid-cols-3 gap-2.5 ${preview ? '' : 'sm:grid-cols-4'}`
-      case 'carrusel': return 'no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-4 pt-1'
+      case 'simple': return 'grid grid-cols-2 gap-4'
+      case 'carrusel': return 'no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-1 pr-1'
       case 'grande': return `grid grid-cols-1 gap-5 ${preview ? '' : 'md:grid-cols-2'}`
       default: return `grid grid-cols-1 gap-4 ${preview ? '' : 'md:grid-cols-2'}` // horizontal
     }

@@ -54,6 +54,18 @@ function LayoutThumb({ id }: { id: Theme['layout'] }) {
           ))}
         </>
       )}
+      {id === 'simple' && (
+        <>
+          {[4, 32].map((x) => (
+            <g key={x}>
+              <rect x={x} y="3" width="24" height="20" rx="4" className={a} />
+              <circle cx={x + 21} cy="6" r="3" className={b} />
+              <rect x={x} y="26" width="14" height="3" rx="1.5" className={a} />
+              <rect x={x} y="31" width="20" height="2.5" rx="1.25" className={b} />
+            </g>
+          ))}
+        </>
+      )}
       {id === 'lista' && (
         <>
           {[5, 16, 27].map((y) => (

@@ -14,6 +14,7 @@ export const LAYOUTS = [
   { id: 'horizontal', label: 'Tarjetas horizontales' },
   { id: 'cuadricula', label: 'Cuadrícula 2 columnas' },
   { id: 'compacta', label: 'Cuadrícula 3 columnas' },
+  { id: 'simple', label: 'Cuadrícula simple' },
   { id: 'lista', label: 'Lista con miniatura' },
   { id: 'grande', label: 'Tarjetas grandes' },
   { id: 'carrusel', label: 'Carrusel horizontal' },

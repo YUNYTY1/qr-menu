@@ -120,7 +120,7 @@ export interface Theme {
   button_color: string
   font: 'Inter' | 'Poppins' | 'Montserrat' | 'Playfair Display' | 'Lora'
   card_style: 'redondeada' | 'plana' | 'sombra'
-  layout: 'horizontal' | 'cuadricula' | 'compacta' | 'lista' | 'grande' | 'carrusel' | 'texto'
+  layout: 'horizontal' | 'cuadricula' | 'compacta' | 'lista' | 'grande' | 'carrusel' | 'texto' | 'simple'
   bg_mode: BgMode
   bg_color: string
   bg_gradient: BgGradient
