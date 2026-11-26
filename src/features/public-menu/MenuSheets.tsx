@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
-import type { Product, PublicRestaurant } from '@/types'
-import { money } from '@/lib/format'
+import type { Product, Promotion, PublicRestaurant } from '@/types'
+import { fmtDate, money } from '@/lib/format'
 import { prettySentence, prettyTitle } from '@/lib/text'
 import { cleanPhone, whatsappUrl } from '@/lib/wa'
 import Icon from '@/components/ui/Icon'
@@ -124,6 +124,56 @@ export function ProductSheet({
           className="mt-2 w-full rounded-xl bg-[var(--btn)] py-3 font-semibold text-[var(--on-btn)] transition active:scale-[0.98] disabled:opacity-40">
           {closed ? 'Cerrado por ahora' : available ? 'Agregar al pedido' : 'Agotado'}
         </button>
+      </div>
+    </Sheet>
+  )
+}
+
+export function PromotionSheet({
+  promo,
+  cur,
+  closed = false,
+  waHref,
+  onClose,
+  onAdd,
+}: {
+  promo: Promotion
+  cur: string
+  closed?: boolean
+  /** Enlace de WhatsApp para consultar la promoción cuando es solo informativa */
+  waHref?: string
+  onClose: () => void
+  onAdd: () => void
+}) {
+  const orderable = promo.price != null
+  return (
+    <Sheet onClose={onClose} title={promo.title}>
+      {promo.image_url ? (
+        <div className="relative">
+          <img src={promo.image_url} alt="" className="aspect-[4/3] w-full object-cover" />
+          <button onClick={onClose} aria-label="Cerrar" className="absolute right-3 top-3 rounded-full bg-black/60 p-1.5 text-white"><Icon name="close" className="h-5 w-5" /></button>
+        </div>
+      ) : (
+        <div className="flex justify-end p-3">
+          <button onClick={onClose} aria-label="Cerrar" className="rounded-full bg-black/10 p-1.5"><Icon name="close" className="h-5 w-5" /></button>
+        </div>
+      )}
+      <div className="space-y-2 p-5 pt-3">
+        <h2 className="text-xl font-bold">{promo.title}</h2>
+        {promo.description && <p className="whitespace-pre-line text-sm text-[var(--card-muted)]">{promo.description}</p>}
+        {promo.ends_at && <p className="text-xs font-medium text-[var(--card-muted)]">Válida hasta el {fmtDate(promo.ends_at)}</p>}
+        {orderable && <p className="text-xl font-extrabold text-[var(--primary)]">{money(cur, Number(promo.price))}</p>}
+        {orderable ? (
+          <button onClick={onAdd} disabled={closed}
+            className="mt-2 w-full rounded-xl bg-[var(--btn)] py-3 font-semibold text-[var(--on-btn)] transition active:scale-[0.98] disabled:opacity-40">
+            {closed ? 'Cerrado por ahora' : 'Agregar al pedido'}
+          </button>
+        ) : waHref ? (
+          <a href={waHref} target="_blank" rel="noreferrer"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--btn)] py-3 font-semibold text-[var(--on-btn)]">
+            <Icon name="whatsapp" /> Consultar por WhatsApp
+          </a>
+        ) : null}
       </div>
     </Sheet>
   )

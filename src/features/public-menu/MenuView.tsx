@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Branch, Product, PublicMenuData } from '@/types'
+import type { Branch, Product, Promotion, PublicMenuData } from '@/types'
 import { loadFont, themeVars } from '@/lib/theme'
 import { money } from '@/lib/format'
 import { prettyTitle } from '@/lib/text'
@@ -10,7 +10,7 @@ import { mapsUrlFor } from '@/lib/maps'
 import Icon from '@/components/ui/Icon'
 import { CartProvider, useCart } from './cart'
 import { CartSheet } from './CartSheet'
-import { InfoSheet, ProductSheet } from './MenuSheets'
+import { InfoSheet, ProductSheet, PromotionSheet } from './MenuSheets'
 import { FAV, Ico, isProductAvailable, norm, SOCIALS, socialUrl } from './menuHelpers'
 import { ProductCard } from './ProductCard'
 
@@ -42,6 +42,7 @@ function Inner({ data, slug, preview }: Props) {
   const cart = useCart()
   const [activeCat, setActiveCat] = useState<string | null>(null)
   const [selected, setSelected] = useState<Product | null>(null)
+  const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null)
   const [cartOpen, setCartOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -60,7 +61,7 @@ function Inner({ data, slug, preview }: Props) {
   // En la vista previa del panel (celular simulado) no se usan clases responsivas
   const rs = (base: string, wide: string) => (preview ? base : `${base} ${wide}`)
 
-  useEffect(() => { if (!preview) cart.sync(products) }, [products]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!preview) cart.sync(products, promotions) }, [products, promotions]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (preview) return
     try { localStorage.setItem(favKey, JSON.stringify(favs)) } catch { /* sin almacenamiento */ }
@@ -285,10 +286,17 @@ function Inner({ data, slug, preview }: Props) {
         <section className="mx-auto mt-7 max-w-4xl px-4" aria-label="Promociones">
           <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4">
             {promotions.map((p) => (
-              <article key={p.id} className="w-64 shrink-0 overflow-hidden rounded-3xl bg-[var(--secondary)] text-[var(--on-secondary)] shadow-md">
+              <button key={p.id} type="button" onClick={() => { if (!preview) setSelectedPromo(p) }} aria-label={`Ver promoción ${p.title}`}
+                className="flex w-64 shrink-0 flex-col overflow-hidden rounded-3xl bg-[var(--secondary)] text-left text-[var(--on-secondary)] shadow-md transition active:scale-[0.98]">
                 {p.image_url && <img src={p.image_url} alt="" loading="lazy" decoding="async" className="h-28 w-full object-cover" />}
-                <div className="p-3"><p className="text-sm font-bold">{p.title}</p>{p.description && <p className="mt-0.5 text-xs opacity-80">{p.description}</p>}</div>
-              </article>
+                <div className="flex flex-1 flex-col p-3">
+                  <p className="text-sm font-bold">{p.title}</p>
+                  {p.description && <p className="mt-0.5 line-clamp-2 text-xs opacity-80">{p.description}</p>}
+                  {p.price != null && (
+                    <span className="mt-2 inline-block w-fit rounded-full bg-[var(--btn)] px-2.5 py-0.5 text-xs font-bold text-[var(--on-btn)]">{money(cur, Number(p.price))}</span>
+                  )}
+                </div>
+              </button>
             ))}
           </div>
         </section>
@@ -373,6 +381,21 @@ function Inner({ data, slug, preview }: Props) {
               cart.add(selected)
               setSelected(null)
             }
+          }}
+        />
+      )}
+      {selectedPromo && (
+        <PromotionSheet
+          promo={selectedPromo}
+          cur={cur}
+          closed={closed}
+          waHref={contact ? whatsappUrl(contact, `Hola, quisiera consultar por la promoción “${selectedPromo.title}” en ${r.name}`) : undefined}
+          onClose={() => setSelectedPromo(null)}
+          onAdd={() => {
+            if (closed) return notifyClosed()
+            if (selectedPromo.price == null) return
+            cart.add({ id: selectedPromo.id, name: selectedPromo.title, price: Number(selectedPromo.price), image_url: selectedPromo.image_url, kind: 'promo' })
+            setSelectedPromo(null)
           }}
         />
       )}

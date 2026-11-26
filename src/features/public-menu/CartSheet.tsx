@@ -116,7 +116,7 @@ export function CartSheet({
         p_payment_method: paymentMethod,
         p_cash_amount: paymentMethod === 'efectivo' ? cashAmount.trim() || null : null,
         p_notes: notes.trim() || null,
-        p_items: cart.lines.map((l) => ({ id: l.id, qty: l.qty })),
+        p_items: cart.lines.map((l) => ({ id: l.id, qty: l.qty, kind: l.kind })),
       })
 
       if (error) {

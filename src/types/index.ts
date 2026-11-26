@@ -132,6 +132,8 @@ export interface Promotion {
   restaurant_id: string
   title: string
   description: string | null
+  /** Precio opcional: con precio la promoción se puede pedir; sin precio es solo informativa */
+  price?: number | null
   image_url: string | null
   starts_at: string | null
   ends_at: string | null

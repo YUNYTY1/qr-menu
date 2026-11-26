@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Product } from '@/types'
+import type { Product, Promotion } from '@/types'
 
 export interface CartLine {
   id: string
@@ -7,16 +7,20 @@ export interface CartLine {
   price: number
   qty: number
   image_url?: string | null
+  /** 'promo' = promoción; sin valor = producto normal */
+  kind?: 'promo'
 }
+
+type CartItem = Pick<Product, 'id' | 'name' | 'price' | 'image_url'> & { kind?: 'promo' }
 
 interface CartCtx {
   lines: CartLine[]
   count: number
   total: number
-  add: (p: Pick<Product, 'id' | 'name' | 'price' | 'image_url'>) => void
+  add: (p: CartItem) => void
   setQty: (id: string, qty: number) => void
   clear: () => void
-  sync: (products: Product[]) => void
+  sync: (products: Product[], promotions?: Promotion[]) => void
 }
 
 const Ctx = createContext<CartCtx>(null!)
@@ -42,13 +46,13 @@ export function CartProvider({ storageKey, children }: { storageKey?: string; ch
     }
   }, [lines, storageKey])
 
-  const add = useCallback((p: Pick<Product, 'id' | 'name' | 'price' | 'image_url'>) => {
+  const add = useCallback((p: CartItem) => {
     setLines((ls) => {
       const i = ls.findIndex((l) => l.id === p.id)
       if (i >= 0) {
         return ls.map((l, k) => (k === i ? { ...l, qty: Math.min(99, l.qty + 1), image_url: p.image_url ?? l.image_url } : l))
       }
-      return [...ls, { id: p.id, name: p.name, price: Number(p.price), qty: 1, image_url: p.image_url ?? null }]
+      return [...ls, { id: p.id, name: p.name, price: Number(p.price), qty: 1, image_url: p.image_url ?? null, ...(p.kind ? { kind: p.kind } : {}) }]
     })
   }, [])
 
@@ -58,10 +62,16 @@ export function CartProvider({ storageKey, children }: { storageKey?: string; ch
 
   const clear = useCallback(() => setLines([]), [])
 
-  // Quita productos que ya no existen / están agotados y actualiza precios guardados
-  const sync = useCallback((products: Product[]) => {
+  // Quita productos y promociones que ya no existen / están agotados y actualiza los precios guardados
+  const sync = useCallback((products: Product[], promotions: Promotion[] = []) => {
     setLines((ls) => {
       const next = ls.flatMap((l) => {
+        if (l.kind === 'promo') {
+          const pr = promotions.find((x) => x.id === l.id)
+          return pr && pr.price != null
+            ? [{ ...l, name: pr.title, price: Number(pr.price), image_url: pr.image_url ?? null }]
+            : []
+        }
         const p = products.find((x) => x.id === l.id)
         return p && p.is_available ? [{ ...l, name: p.name, price: Number(p.price), image_url: p.image_url ?? null }] : []
       })

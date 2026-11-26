@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase, unwrap } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
-import { fmtDate } from '@/lib/format'
+import { fmtDate, money } from '@/lib/format'
 import { useData } from '@/hooks/useData'
 import type { Promotion } from '@/types'
 import { Button, IconButton } from '@/components/ui/Button'
@@ -13,20 +13,20 @@ import Icon from '@/components/ui/Icon'
 import PlanGate from './PlanGate'
 import { useRestaurant } from './RestaurantContext'
 
-interface Form { id?: string; title: string; description: string; image_url: string | null; starts_at: string; ends_at: string; is_active: boolean }
-const blank: Form = { title: '', description: '', image_url: null, starts_at: '', ends_at: '', is_active: true }
+interface Form { id?: string; title: string; description: string; price: string; image_url: string | null; starts_at: string; ends_at: string; is_active: boolean }
+const blank: Form = { title: '', description: '', price: '', image_url: null, starts_at: '', ends_at: '', is_active: true }
 
 export default function PromotionsPage() {
   const { restaurant, canWrite, limits } = useRestaurant()
   return (
     <div>
-      <PageHeader title="Promociones" subtitle="Banners que aparecen arriba de tu carta." />
-      <PlanGate allowed={limits.promotions} feature="Las promociones"><Inner rid={restaurant.id} canWrite={canWrite} /></PlanGate>
+      <PageHeader title="Promociones" subtitle="Aparecen arriba de tu carta. Si les pones precio, tus clientes pueden pedirlas como un producto más." />
+      <PlanGate allowed={limits.promotions} feature="Las promociones"><Inner rid={restaurant.id} cur={restaurant.currency || 'S/'} canWrite={canWrite} /></PlanGate>
     </div>
   )
 }
 
-function Inner({ rid, canWrite }: { rid: string; canWrite: boolean }) {
+function Inner({ rid, cur, canWrite }: { rid: string; cur: string; canWrite: boolean }) {
   const toast = useToast()
   const { data, loading, error, reload } = useData(
     () => unwrap<Promotion[]>(supabase.from('promotions').select('*').eq('restaurant_id', rid).order('created_at', { ascending: false })), [rid])
@@ -39,9 +39,15 @@ function Inner({ rid, canWrite }: { rid: string; canWrite: boolean }) {
     if (!form) return
     if (!form.title.trim()) return setErr('Escribe un título.')
     if (form.starts_at && form.ends_at && form.ends_at < form.starts_at) return setErr('La fecha final no puede ser anterior a la inicial.')
+    const rawPrice = form.price.trim().replace(',', '.')
+    const price = rawPrice === '' ? null : Number(rawPrice)
+    if (price !== null && (!Number.isFinite(price) || price < 0 || price > 99999999)) return setErr('El precio no es válido. Usa solo números, por ejemplo 45 o 45.50.')
     setBusy(true); setErr(null)
     try {
-      const row = { title: form.title.trim(), description: form.description.trim() || null, image_url: form.image_url, starts_at: form.starts_at || null, ends_at: form.ends_at || null, is_active: form.is_active }
+      const row = {
+        title: form.title.trim(), description: form.description.trim() || null, price: price === null ? null : Math.round(price * 100) / 100,
+        image_url: form.image_url, starts_at: form.starts_at || null, ends_at: form.ends_at || null, is_active: form.is_active,
+      }
       if (form.id) await unwrap(supabase.from('promotions').update(row).eq('id', form.id))
       else await unwrap(supabase.from('promotions').insert({ ...row, restaurant_id: rid }))
       toast('Promoción guardada'); setForm(null); reload()
@@ -63,10 +69,15 @@ function Inner({ rid, canWrite }: { rid: string; canWrite: boolean }) {
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{p.title}</p>
               <p className="text-xs text-slate-500">{p.starts_at || p.ends_at ? `${fmtDate(p.starts_at)} → ${fmtDate(p.ends_at)}` : 'Sin fechas'}</p>
-              <div className="mt-1">{p.is_active ? <Pill tone="green">Activa</Pill> : <Pill>Pausada</Pill>}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                {p.is_active ? <Pill tone="green">Activa</Pill> : <Pill>Pausada</Pill>}
+                {p.price != null
+                  ? <span className="text-xs font-semibold text-slate-700">{money(cur, Number(p.price))}</span>
+                  : <span className="text-xs text-slate-400">Solo informativa</span>}
+              </div>
             </div>
             <div className="flex flex-col">
-              <IconButton label="Editar" disabled={!canWrite} onClick={() => { setErr(null); setForm({ id: p.id, title: p.title, description: p.description ?? '', image_url: p.image_url, starts_at: p.starts_at ?? '', ends_at: p.ends_at ?? '', is_active: p.is_active }) }}><Icon name="edit" className="h-4 w-4" /></IconButton>
+              <IconButton label="Editar" disabled={!canWrite} onClick={() => { setErr(null); setForm({ id: p.id, title: p.title, description: p.description ?? '', price: p.price != null ? String(p.price) : '', image_url: p.image_url, starts_at: p.starts_at ?? '', ends_at: p.ends_at ?? '', is_active: p.is_active }) }}><Icon name="edit" className="h-4 w-4" /></IconButton>
               <IconButton label="Eliminar" disabled={!canWrite} onClick={() => setDel(p)}><Icon name="trash" className="h-4 w-4" /></IconButton>
             </div>
           </Card>
@@ -76,7 +87,10 @@ function Inner({ rid, canWrite }: { rid: string; canWrite: boolean }) {
         footer={<><Button variant="secondary" onClick={() => setForm(null)}>Cancelar</Button><Button loading={busy} onClick={save}>Guardar</Button></>}>
         {form && <>
           <Field label="Título"><Input value={form.title} maxLength={120} onChange={(e) => setForm({ ...form, title: e.target.value })} autoFocus /></Field>
-          <Field label="Descripción"><Textarea value={form.description} maxLength={400} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          <Field label="Descripción" hint="Cuenta qué incluye la promoción. Se muestra al tocarla en tu carta."><Textarea value={form.description} maxLength={400} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          <Field label={`Precio (opcional, ${cur})`} hint="Con precio, los clientes pueden agregarla a su pedido. Si lo dejas vacío, solo se muestra.">
+            <Input value={form.price} inputMode="decimal" maxLength={10} placeholder="Ej.: 45.00" onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          </Field>
           <ImageUpload restaurantId={rid} folder="promotions" label="Imagen (opcional)" maxSide={1000} value={form.image_url} onChange={(u) => setForm({ ...form, image_url: u })} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Desde (opcional)"><Input type="date" value={form.starts_at} onChange={(e) => setForm({ ...form, starts_at: e.target.value })} /></Field>
