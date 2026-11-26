@@ -66,4 +66,4 @@ src/features          auth · superadmin · panel · restaurants · public-menu
 ```
 
 ## No incluido en v1 (según la especificación)
-Pasarela de pagos, WhatsApp Business API y analítica avanzada. Para marcar vencidas automáticamente sin abrir el dashboard puedes programar `select refresh_subscription_status()` con pg_cron (la lógica ya trata las vencidas correctamente aunque no se ejecute).
+Pasarela de pagos, WhatsApp Business API y analítica avanzada. Para marcar vencidas automáticamente sin abrir el dashboard puedes programar `select refresh_subscription_status()` con pg_cron (la lógica ya trata las vencidas correctamente aunque no se ejecute). okey
