@@ -18,6 +18,7 @@ import {
   type RestaurantCtx,
 } from './RestaurantContext'
 import PlanBanner from './PlanBanner'
+import SupportButton from './SupportButton'
 
 export default function PanelLayout() {
   const { rid = '' } = useParams()
@@ -166,6 +167,9 @@ export default function PanelLayout() {
           <Outlet />
         </RestaurantContext.Provider>
       )}
+
+      {/* Soporte por WhatsApp: solo para dueños de restaurante (no para el superadmin) */}
+      {!isSuper && <SupportButton restaurantName={data?.restaurant.name} />}
 
       {pendingAction && (
         <div

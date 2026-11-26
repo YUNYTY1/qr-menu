@@ -17,6 +17,85 @@ import { useRestaurant } from './RestaurantContext'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
+/** Dibujo esquemático de cada distribución, para elegirla a simple vista. */
+function LayoutThumb({ id }: { id: Theme['layout'] }) {
+  const a = 'fill-slate-300'
+  const b = 'fill-slate-200'
+  return (
+    <svg viewBox="0 0 60 40" className="h-14 w-full bg-slate-50" aria-hidden="true">
+      {id === 'horizontal' && (
+        <>
+          <rect x="4" y="4" width="20" height="14" rx="2" className={a} />
+          <rect x="28" y="6" width="26" height="3" rx="1.5" className={a} />
+          <rect x="28" y="12" width="16" height="3" rx="1.5" className={b} />
+          <rect x="4" y="22" width="20" height="14" rx="2" className={a} />
+          <rect x="28" y="24" width="26" height="3" rx="1.5" className={a} />
+          <rect x="28" y="30" width="16" height="3" rx="1.5" className={b} />
+        </>
+      )}
+      {id === 'cuadricula' && (
+        <>
+          <rect x="4" y="4" width="24" height="18" rx="2" className={a} />
+          <rect x="32" y="4" width="24" height="18" rx="2" className={a} />
+          <rect x="4" y="26" width="18" height="3" rx="1.5" className={b} />
+          <rect x="32" y="26" width="18" height="3" rx="1.5" className={b} />
+          <rect x="4" y="32" width="12" height="3" rx="1.5" className={a} />
+          <rect x="32" y="32" width="12" height="3" rx="1.5" className={a} />
+        </>
+      )}
+      {id === 'compacta' && (
+        <>
+          {[4, 22, 40].map((x) => (
+            <g key={x}>
+              <rect x={x} y="4" width="16" height="14" rx="2" className={a} />
+              <rect x={x} y="21" width="16" height="2.5" rx="1.25" className={b} />
+              <rect x={x} y="27" width="16" height="9" rx="2" className={a} />
+            </g>
+          ))}
+        </>
+      )}
+      {id === 'lista' && (
+        <>
+          {[5, 16, 27].map((y) => (
+            <g key={y}>
+              <rect x="4" y={y} width="34" height="3" rx="1.5" className={a} />
+              <rect x="4" y={y + 5} width="22" height="3" rx="1.5" className={b} />
+              <rect x="44" y={y - 1} width="12" height="9" rx="2" className={a} />
+            </g>
+          ))}
+        </>
+      )}
+      {id === 'grande' && (
+        <>
+          <rect x="4" y="4" width="52" height="20" rx="2" className={a} />
+          <rect x="4" y="28" width="30" height="3" rx="1.5" className={b} />
+          <rect x="4" y="34" width="18" height="3" rx="1.5" className={a} />
+        </>
+      )}
+      {id === 'carrusel' && (
+        <>
+          <rect x="4" y="5" width="22" height="24" rx="2" className={a} />
+          <rect x="30" y="5" width="22" height="24" rx="2" className={a} />
+          <rect x="56" y="5" width="22" height="24" rx="2" className={a} />
+          <rect x="4" y="33" width="16" height="3" rx="1.5" className={b} />
+          <rect x="30" y="33" width="16" height="3" rx="1.5" className={b} />
+        </>
+      )}
+      {id === 'texto' && (
+        <>
+          {[6, 17, 28].map((y) => (
+            <g key={y}>
+              <rect x="4" y={y} width="34" height="3" rx="1.5" className={a} />
+              <rect x="4" y={y + 5} width="22" height="2" rx="1" className={b} />
+              <rect x="44" y={y} width="12" height="3" rx="1.5" className={a} />
+            </g>
+          ))}
+        </>
+      )}
+    </svg>
+  )
+}
+
 export default function ThemePage() {
   const { restaurant, canWrite, limits, reload: reloadCtx } = useRestaurant()
   const toast = useToast()
@@ -179,11 +258,19 @@ function Editor({ data, canWrite, advanced, onSaved }: {
                   {CARD_STYLES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
                 </Select>
               </Field>
-              <Field label="Distribución de productos">
-                <Select value={theme.layout} disabled={lock} onChange={(e) => set('layout', e.target.value as Theme['layout'])}>
-                  {LAYOUTS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-                </Select>
-              </Field>
+
+              <div className="sm:col-span-2">
+                <p className="mb-1.5 text-sm font-medium text-slate-700">Distribución de productos</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Distribución de productos">
+                  {LAYOUTS.map((x) => (
+                    <button key={x.id} type="button" role="radio" aria-checked={theme.layout === x.id} disabled={lock}
+                      onClick={() => set('layout', x.id)} className={optBtn(theme.layout === x.id)}>
+                      <LayoutThumb id={x.id} />
+                      <span className="block bg-white px-1 py-1.5 text-slate-700">{x.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-3 border-t border-slate-100 pt-4">

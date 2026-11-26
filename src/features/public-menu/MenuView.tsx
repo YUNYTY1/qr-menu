@@ -128,9 +128,18 @@ function Inner({ data, slug, preview }: Props) {
     if (searchOpen) { setSearchOpen(false); setQuery('') } else setSearchOpen(true)
   }
 
-  const gridCls = theme.layout === 'lista'
-    ? 'flex flex-col gap-3'
-    : `grid grid-cols-1 ${theme.layout === 'grande' ? 'gap-5' : 'gap-4'} ${preview ? '' : 'md:grid-cols-2'}`
+  // Contenedor de los productos según la distribución elegida en Apariencia
+  const gridCls = (() => {
+    switch (theme.layout) {
+      case 'lista': return 'flex flex-col gap-3'
+      case 'texto': return 'flex flex-col gap-2'
+      case 'cuadricula': return `grid grid-cols-2 gap-3 ${preview ? '' : 'sm:grid-cols-3'}`
+      case 'compacta': return `grid grid-cols-3 gap-2.5 ${preview ? '' : 'sm:grid-cols-4'}`
+      case 'carrusel': return 'no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-4 pt-1'
+      case 'grande': return `grid grid-cols-1 gap-5 ${preview ? '' : 'md:grid-cols-2'}`
+      default: return `grid grid-cols-1 gap-4 ${preview ? '' : 'md:grid-cols-2'}` // horizontal
+    }
+  })()
 
   const roundBtn = 'relative flex h-10 w-10 items-center justify-center rounded-2xl bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/55 active:scale-90'
   const bubble = rs('h-16 w-16', 'sm:h-[72px] sm:w-[72px]')

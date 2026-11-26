@@ -11,7 +11,13 @@ export const CARD_STYLES = [
   { id: 'redondeada', label: 'Redondeada' }, { id: 'plana', label: 'Plana' }, { id: 'sombra', label: 'Con sombra' },
 ] as const
 export const LAYOUTS = [
-  { id: 'cuadricula', label: 'Cuadrícula (2 columnas)' }, { id: 'lista', label: 'Lista con miniatura' }, { id: 'grande', label: 'Tarjetas grandes' },
+  { id: 'horizontal', label: 'Tarjetas horizontales' },
+  { id: 'cuadricula', label: 'Cuadrícula 2 columnas' },
+  { id: 'compacta', label: 'Cuadrícula 3 columnas' },
+  { id: 'lista', label: 'Lista con miniatura' },
+  { id: 'grande', label: 'Tarjetas grandes' },
+  { id: 'carrusel', label: 'Carrusel horizontal' },
+  { id: 'texto', label: 'Lista solo texto' },
 ] as const
 
 export const BG_MODES: { id: BgMode; label: string }[] = [
@@ -40,7 +46,7 @@ export const TEXTURES: { id: BgTexture; label: string }[] = [
 
 export const DEFAULT_THEME: Theme = {
   template: 'clasico', primary_color: '#ea580c', secondary_color: '#fff7ed', button_color: '#ea580c',
-  font: 'Inter', card_style: 'redondeada', layout: 'cuadricula',
+  font: 'Inter', card_style: 'redondeada', layout: 'horizontal',
   bg_mode: 'plantilla', bg_color: '#fafaf9', bg_gradient: 'atardecer', bg_texture: 'puntos',
 }
 
