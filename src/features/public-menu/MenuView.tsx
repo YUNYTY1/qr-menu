@@ -106,6 +106,7 @@ function Inner({ data, slug, preview }: Props) {
       : cats.filter((c) => !activeCat || c.id === activeCat)
         .map((c) => ({ key: c.id, title: prettyTitle(c.name), items: products.filter((p) => p.category_id === c.id) }))
   const noResults = sections.every((s) => s.items.length === 0)
+  const promoBanners = promotions.filter((p) => !!p.image_url)
 
   function chooseCat(id: string | null) {
     setActiveCat(id)
@@ -282,24 +283,47 @@ function Inner({ data, slug, preview }: Props) {
         )}
       </header>
 
-      {/* Promociones */}
-      {!q && promotions.length > 0 && (
-        <section className="mx-auto mt-7 max-w-4xl px-4" aria-label="Promociones">
-          <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4">
-            {promotions.map((p) => (
-              <button key={p.id} type="button" onClick={() => { if (!preview) setSelectedPromo(p) }} aria-label={`Ver promoción ${p.title}`}
-                className="flex w-64 shrink-0 flex-col overflow-hidden rounded-3xl bg-[var(--secondary)] text-left text-[var(--on-secondary)] shadow-md transition active:scale-[0.98]">
-                {p.image_url && <img src={p.image_url} alt="" loading="lazy" decoding="async" className="h-28 w-full object-cover" />}
-                <div className="flex flex-1 flex-col p-3">
-                  <p className="text-sm font-bold">{p.title}</p>
-                  {p.description && <p className="mt-0.5 line-clamp-2 text-xs opacity-80">{p.description}</p>}
-                  {p.price != null && (
-                    <span className="mt-2 inline-block w-fit rounded-full bg-[var(--btn)] px-2.5 py-0.5 text-xs font-bold text-[var(--on-btn)]">{money(cur, Number(p.price))}</span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
+      {/* Promociones (carrusel continuo de banners solo imagen) */}
+      {!q && promoBanners.length > 0 && (
+        <section className="mx-auto mt-6 max-w-4xl px-4" aria-label="Promociones">
+          {promoBanners.length === 1 ? (
+            <button
+              type="button"
+              onClick={() => { if (!preview) setSelectedPromo(promoBanners[0]) }}
+              aria-label={`Ampliar promoción ${promoBanners[0].title}`}
+              className="relative block w-full overflow-hidden rounded-3xl bg-[var(--secondary)] shadow-md transition active:scale-[0.98]"
+            >
+              <img
+                src={promoBanners[0].image_url!}
+                alt={promoBanners[0].title}
+                loading="lazy"
+                decoding="async"
+                className={`w-full object-cover ${rs('h-40', 'sm:h-44')}`}
+              />
+            </button>
+          ) : (
+            <div className="no-scrollbar overflow-x-auto pb-1">
+              <div className="promo-marquee-track gap-3">
+                {[...promoBanners, ...promoBanners].map((p, idx) => (
+                  <button
+                    key={`${p.id}-${idx}`}
+                    type="button"
+                    onClick={() => { if (!preview) setSelectedPromo(p) }}
+                    aria-label={`Ampliar promoción ${p.title}`}
+                    className={`relative shrink-0 overflow-hidden rounded-3xl bg-[var(--secondary)] shadow-md transition active:scale-[0.98] ${rs('w-72', 'sm:w-80')}`}
+                  >
+                    <img
+                      src={p.image_url!}
+                      alt={p.title}
+                      loading="lazy"
+                      decoding="async"
+                      className={`w-full object-cover ${rs('h-40', 'sm:h-44')}`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -388,16 +412,7 @@ function Inner({ data, slug, preview }: Props) {
       {selectedPromo && (
         <PromotionSheet
           promo={selectedPromo}
-          cur={cur}
-          closed={closed}
-          waHref={contact ? whatsappUrl(contact, `Hola, quisiera consultar por la promoción “${selectedPromo.title}” en ${r.name}`) : undefined}
           onClose={() => setSelectedPromo(null)}
-          onAdd={() => {
-            if (closed) return notifyClosed()
-            if (selectedPromo.price == null) return
-            cart.add({ id: selectedPromo.id, name: selectedPromo.title, price: Number(selectedPromo.price), image_url: selectedPromo.image_url, kind: 'promo' })
-            setSelectedPromo(null)
-          }}
         />
       )}
       {cartOpen && !closed && (

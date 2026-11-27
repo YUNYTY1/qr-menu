@@ -254,7 +254,7 @@ export function CartSheet({
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--card-border)] px-3.5 py-2.5">
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold">
-                        {coords ? 'Ubicación exacta adjunta' : 'Ubicación exacta (opcional)'}
+                        {coords ? 'Ubicación exacta adjunta' : 'Ubicación exacta'}
                       </p>
                       <p className="truncate text-[11px] text-[var(--card-muted)]">
                         {coords
