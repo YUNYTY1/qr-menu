@@ -140,7 +140,14 @@ export interface Promotion {
   is_active: boolean
 }
 
-export interface Profile { id: string; email: string | null; full_name: string | null; is_superadmin: boolean }
+export interface Profile {
+  id: string
+  email: string | null
+  full_name: string | null
+  is_superadmin: boolean
+  otp_verified?: boolean
+}
+
 export interface Membership {
   restaurant_id: string
   role: 'owner' | 'editor'
@@ -155,6 +162,7 @@ export interface PublicMenuData {
   products: Product[]
   promotions: Promotion[]
 }
+
 export type PublicMenuResponse =
   | ({ available: true; status: SubStatus } & PublicMenuData)
   | { available: false; status: SubStatus; restaurant: { name: string; logo_url: string | null } }

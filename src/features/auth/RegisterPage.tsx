@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, supabaseConfigured } from '@/lib/supabase'
 import { errMsg } from '@/lib/errors'
@@ -14,10 +14,37 @@ interface AuthViewProps {
   initialTab?: AuthTab
 }
 
+const OTP_LENGTH = 8
+const MAX_OTP_ATTEMPTS = 5
+
+const DISPOSABLE_DOMAINS = new Set([
+  'yopmail.com',
+  'yopmail.fr',
+  'yopmail.net',
+  'tempmail.com',
+  'temp-mail.org',
+  'guerrillamail.com',
+  'guerrillamail.org',
+  'mailinator.com',
+  '10minutemail.com',
+  'throwawaymail.com',
+  'getnada.com',
+  'sharklasers.com',
+  'dispostable.com',
+  'fakeinbox.com',
+  'trashmail.com',
+])
+
+function isDisposableEmail(rawEmail: string): boolean {
+  const parts = rawEmail.trim().toLowerCase().split('@')
+  if (parts.length !== 2) return false
+  return DISPOSABLE_DOMAINS.has(parts[1])
+}
+
 export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
-  const { session, profile, loading, refresh } = useAuth()
+  const { session, profile, loading, refresh, signOut } = useAuth()
   const navigate = useNavigate()
-  const [params, setSearchParams] = useSearchParams()
+  const [params] = useSearchParams()
   const plan = params.get('plan') ?? ''
 
   const [mode, setMode] = useState<Mode>(initialTab)
@@ -29,22 +56,74 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
   const [googleBusy, setGoogleBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
+
+  // Paso de verificación OTP ('signup' para correo normal, 'email' para cuentas de Google)
+  const [verifyStep, setVerifyStep] = useState(false)
+  const [otpType, setOtpType] = useState<'signup' | 'email'>('signup')
+  const [otpCode, setOtpCode] = useState('')
+  const [verifyBusy, setVerifyBusy] = useState(false)
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [otpAttempts, setOtpAttempts] = useState(0)
+  const googleOtpSentFor = useRef<string | null>(null)
+
+  const needsGoogleOtp = Boolean(
+    !loading && session && profile && !profile.is_superadmin && !profile.otp_verified,
+  )
 
   useEffect(() => {
+    if (needsGoogleOtp) return
     setMode(initialTab)
     setError(null)
     setInfo(null)
-    setSent(false)
-  }, [initialTab])
+    setVerifyStep(false)
+    setOtpCode('')
+    setOtpAttempts(0)
+  }, [initialTab, needsGoogleOtp])
 
-  if (!loading && session && profile) return <Navigate to="/" replace />
+  // Si inició sesión con Google y aún no verificó código OTP, envía el código una vez automáticamente
+  useEffect(() => {
+    if (!needsGoogleOtp || !session?.user?.email) return
+    const userEmail = session.user.email.trim().toLowerCase()
+    setEmail(userEmail)
+    setOtpType('email')
+    setVerifyStep(true)
+
+    if (googleOtpSentFor.current === userEmail) return
+    googleOtpSentFor.current = userEmail
+
+    supabase.auth
+      .signInWithOtp({
+        email: userEmail,
+        options: { shouldCreateUser: false },
+      })
+      .then(({ error: otpErr }) => {
+        if (otpErr) {
+          setError(errMsg(otpErr))
+        } else {
+          setResendCooldown(60)
+          setInfo(`Para mayor seguridad, enviamos un código de ${OTP_LENGTH} dígitos a ${userEmail}.`)
+        }
+      })
+  }, [needsGoogleOtp, session])
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [resendCooldown])
+
+  if (!loading && session && profile && (profile.is_superadmin || profile.otp_verified)) {
+    return <Navigate to="/" replace />
+  }
 
   function switchTab(nextTab: AuthTab) {
     setMode(nextTab)
     setError(null)
     setInfo(null)
-    setSent(false)
+    setVerifyStep(false)
+    setOtpCode('')
+    setOtpAttempts(0)
     setShowPassword(false)
   }
 
@@ -53,22 +132,34 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
     setError(null)
     setInfo(null)
 
-    if (!isEmail(email)) return setError('Ingresa un correo válido.')
+    const cleanEmail = email.trim().toLowerCase()
+    if (!isEmail(cleanEmail)) return setError('Ingresa un correo válido.')
 
     if (mode === 'login') {
       if (password.length < 6) return setError('Ingresa tu contraseña.')
       setBusy(true)
       try {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
           password,
         })
-        if (error) {
-          throw new Error(
-            /invalid login/i.test(error.message)
+        if (signInError) {
+          if (/email not confirmed/i.test(signInError.message)) {
+            await supabase.auth.resend({ type: 'signup', email: cleanEmail }).catch(() => {})
+            setOtpType('signup')
+            setVerifyStep(true)
+            setOtpCode('')
+            setOtpAttempts(0)
+            setResendCooldown(60)
+            setInfo('Tu correo aún no está confirmado. Te enviamos un código de verificación.')
+            return
+          }
+          setError(
+            /invalid login/i.test(signInError.message)
               ? 'Correo o contraseña incorrectos.'
-              : errMsg(error),
+              : errMsg(signInError),
           )
+          return
         }
         await refresh()
         navigate('/', { replace: true })
@@ -81,34 +172,55 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
     }
 
     if (mode === 'register') {
+      if (name.trim().length < 2) {
+        return setError('Escribe tu nombre para crear tu cuenta.')
+      }
+      if (isDisposableEmail(cleanEmail)) {
+        return setError('No se permiten correos temporales o desechables. Usa un correo real.')
+      }
       if (password.length < 8) {
         return setError('La contraseña debe tener al menos 8 caracteres.')
       }
       setBusy(true)
       try {
         const next = `/empezar${plan ? `?plan=${encodeURIComponent(plan)}` : ''}`
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: cleanEmail,
           password,
           options: {
             data: { full_name: name.trim() },
             emailRedirectTo: `${window.location.origin}${next}`,
           },
         })
-        if (error) throw error
+        if (signUpError) {
+          setError(errMsg(signUpError))
+          return
+        }
+
         if (data.session) {
+          try {
+  await supabase.rpc('mark_my_otp_verified')
+} catch {
+  // ignorar si aún no hay sesión activa
+}
           await refresh()
           navigate(next, { replace: true })
-        } else {
-          setSent(true)
+          return
         }
+
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setError('Ese correo ya tiene cuenta. Inicia sesión.')
+          return
+        }
+
+        setOtpType('signup')
+        setVerifyStep(true)
+        setOtpCode('')
+        setOtpAttempts(0)
+        setResendCooldown(60)
+        setInfo(`Te enviamos un código de ${OTP_LENGTH} dígitos a ${cleanEmail}.`)
       } catch (err) {
-        const m = errMsg(err)
-        setError(
-          /already registered|already been registered/i.test(m)
-            ? 'Ese correo ya tiene cuenta. Inicia sesión.'
-            : m,
-        )
+        setError(errMsg(err))
       } finally {
         setBusy(false)
       }
@@ -118,15 +230,105 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
     // mode === 'forgot'
     setBusy(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
-      if (error) throw error
+      if (resetError) {
+        setError(errMsg(resetError))
+        return
+      }
       setInfo('Si el correo está registrado, recibirás un enlace para crear una nueva contraseña.')
     } catch (err) {
       setError(errMsg(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function handleVerifyOtp(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+
+    if (otpAttempts >= MAX_OTP_ATTEMPTS) {
+      return setError('Has superado el límite de intentos. Solicita un código nuevo para continuar.')
+    }
+
+    const token = otpCode.replace(/\D/g, '')
+    if (token.length !== OTP_LENGTH) {
+      return setError(`Ingresa el código completo de ${OTP_LENGTH} dígitos que llegó a tu correo.`)
+    }
+
+    setVerifyBusy(true)
+    try {
+      const cleanEmail = email.trim().toLowerCase()
+      const { error: otpError } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token,
+        type: otpType,
+      })
+      if (otpError) {
+        const nextAttempts = otpAttempts + 1
+        setOtpAttempts(nextAttempts)
+        const restantes = Math.max(0, MAX_OTP_ATTEMPTS - nextAttempts)
+        const baseMsg = /expired|invalid|token/i.test(otpError.message)
+          ? 'El código es incorrecto o ya venció.'
+          : errMsg(otpError)
+        setError(
+          restantes > 0
+            ? `${baseMsg} Te quedan ${restantes} ${restantes === 1 ? 'intento' : 'intentos'}.`
+            : 'Has superado el límite de intentos. Solicita un código nuevo.',
+        )
+        return
+      }
+
+      // Marca el perfil como verificado en PostgreSQL
+      const { error: rpcErr } = await supabase.rpc('mark_my_otp_verified')
+      if (rpcErr) {
+        setError(errMsg(rpcErr))
+        return
+      }
+
+      await refresh()
+      const next = `/empezar${plan ? `?plan=${encodeURIComponent(plan)}` : ''}`
+      navigate(next, { replace: true })
+    } catch (err) {
+      setError(errMsg(err))
+    } finally {
+      setVerifyBusy(false)
+    }
+  }
+
+  async function handleResendCode() {
+    if (resendCooldown > 0 || resendBusy) return
+    setError(null)
+    setInfo(null)
+    setResendBusy(true)
+    try {
+      const cleanEmail = email.trim().toLowerCase()
+      const { error: resendError } =
+        otpType === 'email'
+          ? await supabase.auth.signInWithOtp({
+              email: cleanEmail,
+              options: { shouldCreateUser: false },
+            })
+          : await supabase.auth.resend({
+              type: 'signup',
+              email: cleanEmail,
+            })
+
+      if (resendError) {
+        setError(errMsg(resendError))
+        return
+      }
+      setOtpCode('')
+      setOtpAttempts(0)
+      setResendCooldown(60)
+      setInfo('Te enviamos un nuevo código de verificación a tu correo.')
+    } catch (err) {
+      setError(errMsg(err))
+    } finally {
+      setResendBusy(false)
     }
   }
 
@@ -140,11 +342,14 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
           ? `${window.location.origin}/empezar${plan ? `?plan=${encodeURIComponent(plan)}` : ''}`
           : window.location.origin
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo },
       })
-      if (error) throw error
+      if (oauthError) {
+        setError(errMsg(oauthError))
+        setGoogleBusy(false)
+      }
     } catch (err) {
       setError(errMsg(err))
       setGoogleBusy(false)
@@ -192,27 +397,110 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
         </Link>
 
         <div className="mx-auto mt-6 w-full max-w-md sm:mt-0">
-          {sent ? (
-            <div className="rounded-3xl bg-[#fbf5ee]/95 p-7 text-center shadow-[0_14px_34px_-18px_rgba(107,68,35,0.28)]">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                <Icon name="check" />
+          {verifyStep ? (
+            <div className="rounded-3xl bg-[#fbf5ee]/95 p-7 shadow-[0_14px_34px_-18px_rgba(107,68,35,0.28)]">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#fae6d5] text-[#f05a1a]">
+                <svg
+                  className="h-6 w-6"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect width="20" height="16" x="2" y="4" rx="2" />
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                </svg>
               </div>
-              <h1 className="text-xl font-bold text-slate-900">Revisa tu correo</h1>
-              <p className="mt-2 text-sm text-slate-600">
-                Te enviamos un enlace a <strong>{email}</strong> para confirmar tu cuenta. Al abrirlo
-                podrás configurar tu negocio.
+              <h1 className="text-center text-2xl font-extrabold text-slate-900">
+                Verifica tu correo
+              </h1>
+              <p className="mt-2 text-center text-sm text-slate-600">
+                Enviamos un código de {OTP_LENGTH} dígitos a <strong>{email.trim()}</strong>.
+                Escríbelo aquí para activar tu cuenta.
               </p>
-              <button
-                type="button"
-                onClick={() => switchTab('login')}
-                className="mt-5 inline-block text-sm font-bold text-[#f05a1a] hover:underline"
-              >
-                Ya confirmé, iniciar sesión
-              </button>
+
+              <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4">
+                <div>
+                  <label
+                    htmlFor="otp-code"
+                    className="mb-1.5 block text-center text-xs font-semibold uppercase tracking-wider text-slate-600"
+                  >
+                    Código de verificación
+                  </label>
+                  <input
+                    id="otp-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={OTP_LENGTH}
+                    autoFocus
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
+                    placeholder={'0'.repeat(OTP_LENGTH)}
+                    className="h-14 w-full rounded-xl border border-[#f05a1a] bg-white px-4 text-center font-mono text-xl font-bold tracking-[0.28em] text-slate-900 placeholder:text-slate-300 shadow-[0_0_0_3px_rgba(240,90,26,0.12)] focus:border-[#f05a1a] focus:outline-none"
+                  />
+                </div>
+
+                {error && (
+                  <p
+                    role="alert"
+                    className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
+                    {error}
+                  </p>
+                )}
+                {info && (
+                  <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    {info}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  loading={verifyBusy}
+                  disabled={otpAttempts >= MAX_OTP_ATTEMPTS}
+                  className="h-12 w-full rounded-xl bg-[#f05a1a] text-sm font-semibold text-white shadow-[0_8px_20px_-6px_rgba(240,90,26,0.65)] transition hover:bg-[#dc4e12]"
+                >
+                  Confirmar e ingresar
+                </Button>
+              </form>
+
+              <div className="mt-5 flex flex-col items-center gap-2 text-xs text-slate-600">
+                <button
+                  type="button"
+                  disabled={resendCooldown > 0 || resendBusy}
+                  onClick={handleResendCode}
+                  className="font-bold text-[#f05a1a] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {resendBusy
+                    ? 'Enviando código...'
+                    : resendCooldown > 0
+                      ? `Reenviar código en ${resendCooldown}s`
+                      : 'Reenviar código'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (needsGoogleOtp) {
+                      googleOtpSentFor.current = null
+                      await signOut()
+                    }
+                    setVerifyStep(false)
+                    setOtpCode('')
+                    setOtpAttempts(0)
+                    setError(null)
+                    setInfo(null)
+                  }}
+                  className="text-slate-500 hover:text-slate-800 hover:underline"
+                >
+                  {needsGoogleOtp ? 'Usar otra cuenta o correo' : 'Cambiar correo electrónico'}
+                </button>
+              </div>
             </div>
           ) : (
             <>
-              {/* Logo limpio sin nombre ni línea */}
               <div className="flex flex-col items-center text-center">
                 <div className="flex w-full max-w-[240px] items-center justify-center rounded-3xl bg-[#fbf5ee]/90 px-6 py-5 shadow-[0_14px_34px_-18px_rgba(107,68,35,0.28)]">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#fae6d5] p-3 ring-4 ring-[#f05a1a]/10">
@@ -224,7 +512,6 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
                   </div>
                 </div>
 
-                {/* Pestañas en el mismo contenedor */}
                 <div
                   role="tablist"
                   aria-label="Autenticación"
