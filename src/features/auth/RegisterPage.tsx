@@ -14,8 +14,9 @@ interface AuthViewProps {
   initialTab?: AuthTab
 }
 
-const OTP_LENGTH = 8
+const OTP_LENGTH = 6
 const MAX_OTP_ATTEMPTS = 5
+const MIN_PASSWORD_LENGTH = 8
 
 const DISPOSABLE_DOMAINS = new Set([
   'yopmail.com',
@@ -67,6 +68,12 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
   const [otpAttempts, setOtpAttempts] = useState(0)
   const googleOtpSentFor = useRef<string | null>(null)
 
+  // Paso obligatorio "Crea tu contraseña" (cuentas que entraron con Google/código)
+  const [passwordStep, setPasswordStep] = useState(params.get('set_password') === '1')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+
   const needsGoogleOtp = Boolean(
     !loading && session && profile && !profile.is_superadmin && !profile.otp_verified,
   )
@@ -80,6 +87,13 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
     setOtpCode('')
     setOtpAttempts(0)
   }, [initialTab, needsGoogleOtp])
+
+  // Si no hay sesión, no tiene sentido mostrar el paso de contraseña
+  useEffect(() => {
+    if (!loading && !session && passwordStep) {
+      setPasswordStep(false)
+    }
+  }, [loading, session, passwordStep])
 
   // Si inició sesión con Google y aún no verificó código OTP, envía el código una vez automáticamente
   useEffect(() => {
@@ -113,8 +127,20 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
     return () => clearTimeout(t)
   }, [resendCooldown])
 
-  if (!loading && session && profile && (profile.is_superadmin || profile.otp_verified)) {
+  // Cuando la cuenta ya está verificada se va al inicio, salvo que falte crear la contraseña
+  if (
+    !passwordStep &&
+    !loading &&
+    session &&
+    profile &&
+    (profile.is_superadmin || profile.otp_verified)
+  ) {
     return <Navigate to="/" replace />
+  }
+
+  function goNext() {
+    const next = `/empezar${plan ? `?plan=${encodeURIComponent(plan)}` : ''}`
+    navigate(next, { replace: true })
   }
 
   function switchTab(nextTab: AuthTab) {
@@ -178,8 +204,8 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
       if (isDisposableEmail(cleanEmail)) {
         return setError('No se permiten correos temporales o desechables. Usa un correo real.')
       }
-      if (password.length < 8) {
-        return setError('La contraseña debe tener al menos 8 caracteres.')
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        return setError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`)
       }
       setBusy(true)
       try {
@@ -197,12 +223,13 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
           return
         }
 
+        // Solo ocurre si "Confirm email" está desactivado en Supabase (modo desarrollo)
         if (data.session) {
           try {
-  await supabase.rpc('mark_my_otp_verified')
-} catch {
-  // ignorar si aún no hay sesión activa
-}
+            await supabase.rpc('mark_my_otp_verified')
+          } catch {
+            // ignorar si aún no hay sesión activa
+          }
           await refresh()
           navigate(next, { replace: true })
           return
@@ -289,13 +316,52 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
         return
       }
 
+      // Cuentas de Google (otpType 'email') aún no tienen contraseña: se la pedimos.
+      // Importante: activar el paso ANTES de refresh(), si no, el redirect de arriba
+      // manda al usuario a "/" antes de que se vea la pantalla.
+      const fromGoogle = otpType === 'email'
+      if (fromGoogle) {
+        setNewPassword('')
+        setConfirmPassword('')
+        setShowPassword(false)
+        setPasswordStep(true)
+      }
+
       await refresh()
-      const next = `/empezar${plan ? `?plan=${encodeURIComponent(plan)}` : ''}`
-      navigate(next, { replace: true })
+
+      if (!fromGoogle) goNext()
     } catch (err) {
       setError(errMsg(err))
     } finally {
       setVerifyBusy(false)
+    }
+  }
+
+  async function handleSetPassword(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setInfo(null)
+
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return setError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`)
+    }
+    if (newPassword !== confirmPassword) {
+      return setError('Las contraseñas no coinciden.')
+    }
+
+    setPasswordBusy(true)
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) {
+        setError(errMsg(updateError))
+        return
+      }
+      setPasswordStep(false)
+      goNext()
+    } catch (err) {
+      setError(errMsg(err))
+    } finally {
+      setPasswordBusy(false)
     }
   }
 
@@ -397,7 +463,114 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
         </Link>
 
         <div className="mx-auto mt-6 w-full max-w-md sm:mt-0">
-          {verifyStep ? (
+          {passwordStep && session ? (
+            <div className="rounded-3xl bg-[#fbf5ee]/95 p-7 shadow-[0_14px_34px_-18px_rgba(107,68,35,0.28)]">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#fae6d5] text-[#f05a1a]">
+                <svg
+                  className="h-6 w-6"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <h1 className="text-center text-2xl font-extrabold text-slate-900">
+                Crea tu contraseña
+              </h1>
+              <p className="mt-2 text-center text-sm text-slate-600">
+                Así podrás entrar con <strong>{session.user.email ?? email.trim()}</strong> y tu
+                contraseña, además de usar Google.
+              </p>
+
+              <form onSubmit={handleSetPassword} className="mt-6 space-y-4">
+                <div>
+                  <label
+                    htmlFor="new-password"
+                    className="mb-1.5 block text-sm font-semibold text-slate-800"
+                  >
+                    Contraseña
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      id="new-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      autoFocus
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder={`Mínimo ${MIN_PASSWORD_LENGTH} caracteres`}
+                      className="h-12 w-full rounded-xl border border-[#f05a1a] bg-white pl-4 pr-24 text-sm text-slate-900 placeholder:text-slate-400 shadow-[0_0_0_3px_rgba(240,90,26,0.12)] focus:border-[#f05a1a] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    >
+                      {showPassword ? 'Ocultar' : 'Mostrar'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="confirm-password"
+                    className="mb-1.5 block text-sm font-semibold text-slate-800"
+                  >
+                    Repite tu contraseña
+                  </label>
+                  <input
+                    id="confirm-password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Escríbela otra vez"
+                    className="h-12 w-full rounded-xl border border-slate-200/90 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-[#f05a1a] focus:outline-none"
+                  />
+                </div>
+
+                {error && (
+                  <p
+                    role="alert"
+                    className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  loading={passwordBusy}
+                  className="h-12 w-full rounded-xl bg-[#f05a1a] text-sm font-semibold text-white shadow-[0_8px_20px_-6px_rgba(240,90,26,0.65)] transition hover:bg-[#dc4e12]"
+                >
+                  Guardar y continuar
+                </Button>
+              </form>
+
+              <div className="mt-5 flex justify-center text-xs text-slate-600">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await signOut()
+                    googleOtpSentFor.current = null
+                    setPasswordStep(false)
+                    setNewPassword('')
+                    setConfirmPassword('')
+                    setError(null)
+                    setInfo(null)
+                  }}
+                  className="text-slate-500 hover:text-slate-800 hover:underline"
+                >
+                  Usar otra cuenta o correo
+                </button>
+              </div>
+            </div>
+          ) : verifyStep ? (
             <div className="rounded-3xl bg-[#fbf5ee]/95 p-7 shadow-[0_14px_34px_-18px_rgba(107,68,35,0.28)]">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#fae6d5] text-[#f05a1a]">
                 <svg
@@ -671,7 +844,9 @@ export default function AuthView({ initialTab = 'login' }: AuthViewProps) {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder={
-                          mode === 'register' ? 'Mínimo 8 caracteres' : 'Ingresa tu contraseña'
+                          mode === 'register'
+                            ? `Mínimo ${MIN_PASSWORD_LENGTH} caracteres`
+                            : 'Ingresa tu contraseña'
                         }
                         className="h-12 w-full rounded-xl border border-slate-200/90 bg-white pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-[#f05a1a] focus:outline-none"
                       />
